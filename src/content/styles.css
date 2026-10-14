@@ -1,0 +1,28 @@
+/* Lives inside the overlay's shadow root, so host-page CSS cannot reach these rules. */
+:host {
+  all: initial;
+  position: fixed;
+  inset: auto 0 max(7vh, 24px) 0;
+  z-index: 2147483647;
+  display: flex;
+  justify-content: center;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.sublanka-subtitle {
+  box-sizing: border-box;
+  max-width: min(92vw, 1100px);
+  padding: 0.25em 0.7em;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  font-family: 'Noto Sans Sinhala', 'Sinhala Sangam MN', 'Nirmala UI', 'Iskoola Pota', system-ui, sans-serif;
+  font-size: clamp(18px, 2.6vw, 40px);
+  font-weight: 500;
+  line-height: 1.55;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  white-space: pre-line;
+  overflow-wrap: break-word;
+}
