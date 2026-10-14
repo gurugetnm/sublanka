@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import malformedSrt from '../../test-page/fixtures/malformed-si.srt?raw';
 import sampleSrt from '../../test-page/fixtures/sample-si.srt?raw';
+import { isSubtitleCue } from '../shared/messages';
 import { parseSrt } from './srtParser';
+import { MAX_SUBTITLE_FILE_BYTES } from './subtitleFile';
 import { SubtitleParseError } from './types';
 
 describe('parseSrt', () => {
@@ -102,5 +104,25 @@ describe('parseSrt', () => {
     expect(warnings).toEqual([]);
     expect(cues).toHaveLength(5000);
     expect(cues[4999]).toMatchObject({ startTime: 9998, endTime: 9999, text: 'පේළිය 5000' });
+  });
+
+  // A provider file is uploaded by strangers, so a hostile line must not stall the worker (regex backtracking was quadratic).
+  it.each([
+    ['unclosed "<"', '<'],
+    ['unclosed "{\\"', '{\\'],
+    ['unclosed "{"', '{'],
+  ])('parses a 5 MB line of %s in linear time', (_, unit) => {
+    const line = unit.repeat(Math.floor(MAX_SUBTITLE_FILE_BYTES / unit.length));
+    const started = performance.now();
+    const { cues } = parseSrt(`1\n00:00:01,000 --> 00:00:02,000\nok ${line}\n\n2\n00:00:03,000 --> 00:00:04,000\n<i>next</i>`);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(cues.at(-1)?.text).toBe('next');
+  });
+
+  it('skips a cue whose timestamp overflows to Infinity instead of losing the whole file', () => {
+    const { cues, warnings } = parseSrt(`1\n00:00:01,000 --> ${'9'.repeat(400)}:00:02,000\nhuge\n\n2\n00:00:03,000 --> 00:00:04,000\nok`);
+    expect(cues.map((cue) => cue.text)).toEqual(['ok']);
+    expect(cues.every(isSubtitleCue)).toBe(true);
+    expect(warnings).toHaveLength(1);
   });
 });

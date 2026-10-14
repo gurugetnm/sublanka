@@ -6,9 +6,10 @@ const TIMESTAMP = String.raw`(?:(\d+):)?(\d{1,2}):(\d{1,2})[,.](\d{1,3})`;
 const TIMING_LINE = new RegExp(String.raw`^${TIMESTAMP}\s*-->\s*${TIMESTAMP}(?:\s.*)?$`);
 
 // WebVTT/SRT markup such as <i>, <c.x>, <v Name>, <00:01.000>, <font ...> and ASS overrides like {\an8}.
-const MARKUP = /<[^>\n]*>|\{\\[^}\n]*\}/g;
+// A tag never spans its own opener, so a scan stops at the next "<" or "{": linear time on hostile lines like "<<<<…".
+const MARKUP = /<[^<>\n]*>|\{\\[^{}\n]*\}/g;
 // {\an9}, also inside combined overrides such as {\b1\an9}.
-const ASS_ALIGN = /\{[^}\n]*\\an([1-9])/;
+const ASS_ALIGN = /\{[^{}\n]*\\an([1-9])/;
 const ENTITIES: Record<string, string> = {
   amp: '&',
   lt: '<',
@@ -40,7 +41,8 @@ export function parseTimingLine(line: string): { start: number; end: number } | 
   const [, h1, m1 = '', s1 = '', f1 = '', h2, m2 = '', s2 = '', f2 = ''] = match;
   const start = toSeconds(h1, m1, s1, f1);
   const end = toSeconds(h2, m2, s2, f2);
-  return start === null || end === null ? null : { start, end };
+  // A hundreds-of-digits hour field overflows to Infinity, which the content script rightly rejects.
+  return start === null || end === null || !Number.isFinite(end) ? null : { start, end };
 }
 
 export function cleanCueText(lines: string[]): string {
