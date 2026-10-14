@@ -54,7 +54,7 @@ const shownText = () => {
   return overlay ? (overlay.shadowRoot?.querySelector('.sublanka-subtitle')?.textContent ?? '') : null;
 };
 
-const load = (cues = CUES, fileName = 'film.si.srt'): SubLankaMessage => ({ type: 'sublanka:load-track', fileName, cues });
+const load = (cues = CUES, fileName = 'film.si.srt'): SubLankaMessage => ({ type: 'sublanka:load-track', fileName, cues, source: 'local' });
 
 let controller: PlaybackController;
 let frames: Map<number, FrameRequestCallback>;
@@ -203,7 +203,28 @@ describe('PlaybackController synchronization', () => {
     controller.handle(load());
     const state = controller.handle(load([{ index: 0, startTime: 0, endTime: 5, text: 'නව ගොනුව' }], 'new.vtt'));
     expect(shownText()).toBe('නව ගොනුව');
-    expect(state.track).toEqual({ fileName: 'new.vtt', cueCount: 1 });
+    expect(state.track).toEqual({ fileName: 'new.vtt', cueCount: 1, source: 'local' });
+  });
+
+  it('treats a downloaded track exactly like a local file, and either can replace the other', () => {
+    const player = fakeVideo();
+    player.setTime(2);
+    controller.handle(load());
+    const downloaded = controller.handle({
+      type: 'sublanka:load-track',
+      fileName: 'Film.srt',
+      source: 'opensubtitles',
+      cues: [{ index: 0, startTime: 0, endTime: 5, text: 'බාගත කළ' }],
+    });
+    expect(downloaded.track).toEqual({ fileName: 'Film.srt', cueCount: 1, source: 'opensubtitles' });
+    expect(shownText()).toBe('බාගත කළ');
+
+    controller.applySettings({ ...DEFAULT_SETTINGS, offset: 1.5 });
+    player.setTime(6);
+    expect(shownText()).toBe('බාගත කළ'); // cue ends at 5 s; +1.5 s offset keeps it until 6.5 s
+
+    const local = controller.handle(load());
+    expect(local.track).toMatchObject({ fileName: 'film.si.srt', source: 'local' });
   });
 
   it('removes the overlay and stops following the video when the track is removed', () => {

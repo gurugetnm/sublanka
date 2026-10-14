@@ -1,5 +1,5 @@
 import { DEMO_SUBTITLE_TEXT } from '../shared/constants';
-import type { PlayerState, SubLankaMessage } from '../shared/messages';
+import type { PlayerState, SubLankaMessage, SubtitleSource } from '../shared/messages';
 import { DEFAULT_SETTINGS, type SubtitleSettings } from '../shared/settings';
 import { activeLayout, createCueIndex, type CueIndex } from '../subtitles/subtitleSearch';
 import type { SubtitleLayout } from '../subtitles/types';
@@ -30,7 +30,7 @@ const VIDEO_CHECK_MS = 1000;
  * currentTime. One instance per page; the track lives only in memory.
  */
 export class PlaybackController {
-  private track: { fileName: string; cues: CueIndex } | null = null;
+  private track: { fileName: string; source: SubtitleSource; cues: CueIndex } | null = null;
   private subtitlesEnabled = true;
   private demoVisible = false;
   private settings: SubtitleSettings = DEFAULT_SETTINGS;
@@ -51,7 +51,7 @@ export class PlaybackController {
   handle(message: SubLankaMessage): PlayerState {
     switch (message.type) {
       case 'sublanka:load-track':
-        this.track = { fileName: message.fileName, cues: createCueIndex(message.cues) };
+        this.track = { fileName: message.fileName, source: message.source, cues: createCueIndex(message.cues) };
         this.subtitlesEnabled = true;
         this.ensureVideo();
         this.videoCheck ??= setInterval(this.checkVideo, VIDEO_CHECK_MS);
@@ -102,7 +102,7 @@ export class PlaybackController {
 
   private state(): PlayerState {
     return {
-      track: this.track && { fileName: this.track.fileName, cueCount: this.track.cues.cues.length },
+      track: this.track && { fileName: this.track.fileName, cueCount: this.track.cues.cues.length, source: this.track.source },
       subtitlesEnabled: this.subtitlesEnabled,
       demoVisible: this.demoVisible,
       videos: findVideoCandidates().map(({ id, width, height, playing }) => ({ id, width, height, playing })),

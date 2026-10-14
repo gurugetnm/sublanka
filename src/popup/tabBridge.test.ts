@@ -3,7 +3,7 @@ import type { PlayerState } from '../shared/messages';
 import { connectToActiveTab, sendToTab } from './tabBridge';
 
 const STATE: PlayerState = {
-  track: { fileName: 'film.si.srt', cueCount: 120 },
+  track: { fileName: 'film.si.srt', cueCount: 120, source: 'local' },
   subtitlesEnabled: true,
   demoVisible: false,
   videos: [{ id: 1, width: 1280, height: 720, playing: true }],

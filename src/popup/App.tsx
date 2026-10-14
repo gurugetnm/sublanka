@@ -72,7 +72,7 @@ export function App() {
     setWarnings([]);
     try {
       const parsed = await readSubtitleFile(file);
-      const state = await sendToTab(tabId, { type: 'sublanka:load-track', fileName: file.name, cues: parsed.cues });
+      const state = await sendToTab(tabId, { type: 'sublanka:load-track', fileName: file.name, cues: parsed.cues, source: 'local' });
       setConnection({ kind: 'ready', tabId, state });
       setWarnings(parsed.warnings);
     } catch (caught) {
