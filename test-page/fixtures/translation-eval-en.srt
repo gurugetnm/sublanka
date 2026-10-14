@@ -1,0 +1,47 @@
+1
+00:00:01,000 --> 00:00:03,000
+Good morning. Did you sleep well?
+
+2
+00:00:03,500 --> 00:00:06,000
+Are you coming to the market with us,
+or are you staying home?
+
+3
+00:00:06,500 --> 00:00:09,000
+I waited for you all night.
+Why didn't you call me?
+
+4
+00:00:09,500 --> 00:00:11,500
+Don't worry, it's a piece of cake.
+
+5
+00:00:12,000 --> 00:00:14,000
+Let's not beat around the bush.
+
+6
+00:00:14,500 --> 00:00:16,500
+No way, dude. That's awesome!
+
+7
+00:00:17,000 --> 00:00:19,500
+- Where's the key?
+- It's in the blue bag.
+
+8
+00:00:20,000 --> 00:00:22,500
+Nimal and Kumari are taking the train from Kandy to Galle on Friday.
+
+9
+00:00:23,000 --> 00:00:27,000
+If we leave before the rain starts, we can reach the village,
+fix the roof, and still be back before the shops close.
+
+10
+00:00:26,000 --> 00:00:28,000
+Wait!
+
+11
+00:00:28,500 --> 00:00:30,000
+Wait!

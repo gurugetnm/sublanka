@@ -2,9 +2,9 @@
 
 A Sinhala-first Chrome extension for finding, translating, and displaying synchronized Sinhala subtitles over web video.
 
-> **Status: Milestone 3 (Sinhala subtitle discovery).** Search OpenSubtitles.com for Sinhala subtitles from the popup, pick a result, and SubLanka downloads it and plays it in sync with an HTML5 video on the page. Local `.srt`/`.vtt` files still work as before. Searching needs your own OpenSubtitles API key (see [API setup](#api-setup)). Translating English subtitles is **not implemented yet**.
+> **Status: Milestone 4 (English → Sinhala translation).** Upload an English `.srt`/`.vtt` file in the new **Translate** tab and SubLanka machine-translates it into Sinhala with Google Cloud Translation, keeping every cue's timing. You can preview and edit the result, play it on the page, and download it as SRT or WebVTT. Translation needs your own Google Cloud API key (see [Translation setup](#translation-setup)). Search (Milestone 3) and local playback still work as before.
 >
-> **Live OpenSubtitles searching and downloading have not been tested with real credentials yet.** The client follows the documented API and is covered by mocked tests; see [What has been verified](#what-has-been-verified).
+> **Live Google translation has not been tested with a real key yet**, and neither have live OpenSubtitles searching and downloading. The client follows the documented API and is covered by mocked tests; see [What has been verified](#what-has-been-verified).
 
 ## Features
 
@@ -31,11 +31,14 @@ A Sinhala-first Chrome extension for finding, translating, and displaying synchr
 - **Demo subtitle**: the Milestone 1 fixed sample line, kept under _Developer tools_ for debugging.
 
 - **Sinhala subtitle search** (Milestone 3): search OpenSubtitles.com by title, type (movie or TV episode), optional year, and season/episode. See [Subtitle discovery](#subtitle-discovery).
-- **Popup tabs**: _Subtitles_ (player, loaded track, timing), _Search_ and _Settings_ (position, appearance, subtitle provider, developer tools).
+- **English → Sinhala translation** (Milestone 4): translate a local English subtitle file, review and edit it, apply it to the video, and export it. See [Translation](#translation).
+- **Popup tabs**: _Subtitles_ (player, loaded track, timing), _Search_, _Translate_ and _Settings_ (position, appearance, subtitle provider, translation, developer tools).
 
 ### Not implemented yet
 
-- Translating English subtitles
+- Translating a subtitle that is already loaded on the page, or one found through Search. Search only finds Sinhala files, so translation starts from a local English file.
+- On-device (offline) translation
+- Translation style options (formal, literal); Google's v2 API has none
 - Remembering a subtitle file after the page reloads
 
 ## Subtitle discovery
@@ -121,7 +124,7 @@ The popup and the worker only use the provider-neutral types; nothing outside `p
 | `GET <link>` | The file itself. No API key or token is sent. |
 | `POST /login` | Optional. `{ username, password }` returns `token` and `base_url`. |
 
-Every API request carries `Api-Key` and `X-User-Agent: SubLanka v0.3.0`. The docs ask for a `User-Agent` naming the app, and browsers do not let extensions set `User-Agent`; the API accepts `X-User-Agent` instead. A signed-in request also carries `Authorization: Bearer <token>`.
+Every API request carries `Api-Key` and `X-User-Agent: SubLanka v0.4.0`. The docs ask for a `User-Agent` naming the app, and browsers do not let extensions set `User-Agent`; the API accepts `X-User-Agent` instead. A signed-in request also carries `Authorization: Bearer <token>`.
 
 Errors are mapped to messages:
 
@@ -161,6 +164,95 @@ There are no automatic retries.
 - If the worker is suspended mid-download, the reopened popup shows _The last download was interrupted_ after 2 minutes.
 - **Navigation during download**: the worker records the tab's URL before downloading and checks it again before loading. If the page changed, or the tab closed, nothing is loaded, and the message says why. Chrome also revokes `activeTab` access when a tab navigates.
 - The worker has no timers or polling. It wakes only for a download request from the popup and rejects messages from content scripts or other extensions.
+
+## Translation
+
+### Workflow
+
+1. Open SubLanka and choose the **Translate** tab. The badge says _Google Cloud Translation ready_ or _Setup required_.
+2. Click **Choose an English .srt or .vtt file**. The file is read and parsed on your device with the same parser as the Subtitles tab, and the popup shows its subtitle and character counts. Nothing is sent yet.
+3. Read the notice: the subtitle text goes to Google Cloud Translation with your own key, and Google may bill your project. The first time, the button reads **Agree and translate to Sinhala**. Clicking it is the consent, and it is remembered.
+4. The job runs in the background worker. The popup shows _Translating 320 / 1,200 subtitles · 26% complete_. These counts include only batches Google has actually returned. There is no timer-driven progress.
+5. **Cancel translation** stops it. Finished batches are kept, and the message says how many. **Resume translation** sends only the subtitles still missing.
+6. When it finishes, check the preview: cue number, timestamps, English and Sinhala, 20 per page. **Edit** opens one cue in a text box. Saved edits are trimmed, use LF line breaks, have Unicode NFC normalization and lose control characters. They are always shown as plain text, never as HTML.
+7. **Apply Sinhala subtitles** loads the result into the page through the normal `load-track` message as a _Machine translated_ track. If a track is already loaded, the popup says it will be replaced. Your timing offset, position, appearance, fullscreen behaviour and the playing video are not touched.
+8. **SRT**, **VTT** and **Review** download `name.si.srt`, `name.si.vtt` and `name.si.review.txt` (timing, English and Sinhala side by side, for checking). A trailing `.en`/`.eng`/`.english` is dropped from the name. **Translate another file** discards the job and your edits.
+
+### Architecture
+
+```
+popup Translate tab ──parse file locally──▶ cues
+popup ──sublanka:translation {start|resume|cancel|edit|clear|get}──▶ background worker
+background worker ──POST /language/translate/v2 (128 lines / 5,000 chars per batch)──▶ translation.googleapis.com
+background worker ──job + progress after every batch──▶ chrome.storage.session ──onChanged──▶ popup
+popup ──load-track (source: translated)──▶ content.js (existing PlaybackController)
+```
+
+```
+src/translation/
+├── types.ts            # TranslationProvider: maxSegments, maxChars, isConfigured(), translate(texts, signal)
+├── googleTranslate.ts  # Google Cloud Translation v2 adapter, key storage, error mapping, response validation
+├── translationJob.ts   # batching, retries, cancel/resume, job state in the worker, input limits
+└── subtitleExport.ts   # SRT / WebVTT / review-file writers, safe file names
+```
+
+- **Cue mapping**: each cue's full text (all its lines) is one segment. Google returns exactly one translation per segment, in order. A reply with the wrong count, or an empty or non-string line, is rejected and none of it is used. Cues are never joined with delimiters, so a model cannot shift lines onto the wrong cue. Context therefore stops at the cue: a sentence split across two cues is translated as two pieces.
+- **Timing**: only text is sent. Translated cues are the original cue objects (index, start, end, `{\anN}` position) with a new `text`, so order, gaps and overlaps are exactly as parsed.
+- **Batching**: up to 128 segments and 5,000 characters per request (Google's documented limit and its recommended size). One job runs at a time, and a second **Start** is refused.
+- **Retries**: rate limits (429), 5xx, timeouts (30 s) and network errors retry after 1 s, 2 s and 4 s, then the job fails with a message. Invalid key, disabled API, quota exhausted and invalid responses are not retried. `Retry-After` is not read, because Google's CORS response does not expose it.
+- **Repeated lines** ("What?", "Yes.") are sent once per job. A resumed job reuses lines it has already translated. There is no persistent cache: nothing is stored beyond the current job, so no terms question arises about keeping Google's output.
+- **Limits**: 5,000 cues, 300,000 characters (about US$6 at list price), 1,000 characters per cue.
+- **Errors shown**: setup required, invalid or restricted key, Cloud Translation API or billing not enabled, rate limit, quota exhausted, network failure, timeout, provider unavailable, unmatched response, and partial completion (kept and resumable).
+
+### Popup and worker lifecycle
+
+- The job lives in the worker, so closing the popup does not stop it. A reopened popup reads the job from `chrome.storage.session` and follows its progress.
+- A storage write after every batch also keeps the MV3 worker alive while it works. If Chrome stops the worker anyway (browser sleep, extension reload, a very long stall), the job stays stored as _running_. The next popup sees that no worker is running it and shows _interrupted_ with **Resume**. Finished batches are kept, and nothing is sent twice.
+- A late reply after **Cancel** is discarded, and a reply is applied only to cues that are still empty.
+- The job is in memory-only session storage. It survives tab navigation and popup closes, but not closing the browser. Edits are part of the job. Download the files to keep them.
+- Applying needs a page with the content script, as for local files. Navigating the tab does not affect the job.
+
+## Translation setup
+
+Google Cloud Translation needs a Google Cloud project with billing enabled.
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), create or pick a project and enable billing.
+2. Enable the **Cloud Translation API** ([setup guide](https://docs.cloud.google.com/translate/docs/setup)).
+3. Under **APIs & Services → Credentials**, create an **API key** and restrict it to the Cloud Translation API.
+4. In SubLanka, open **Settings → Translation**, paste the key and click **Save**.
+
+How the key is handled:
+- **Never bundled.** The extension has no `.env` file and no `VITE_*` variable; a value built into an extension is readable by anyone who installs it. Each user brings their own key. It is stored in `chrome.storage.local` on that device and sent only to `translation.googleapis.com`, in the `X-Goog-Api-Key` header (not the URL). **Remove key** deletes it.
+- No service-account JSON is ever used. A key restricted to one API is the credential Google offers for this kind of client.
+- **Public release:** shipping a shared key would need a small server proxy that holds the key, enforces input limits and per-user rate limits, and forwards only translation calls. That proxy is **not built**. It is unnecessary while each user supplies their own key.
+
+**Cost and quotas** (Google's terms, checked October 2026; see [pricing](https://cloud.google.com/translate/pricing) and [quotas](https://docs.cloud.google.com/translate/quotas)):
+- NMT text translation: the first 500,000 characters per month are free (as a monthly credit), then US$20 per million characters. Billing must be enabled even for the free tier.
+- A feature film's subtitles are usually 30,000 to 60,000 characters. The Translate tab shows the count before you start.
+- Default quota: 6,000,000 characters per minute per project. SubLanka sends batches one at a time.
+
+### Privacy
+
+- Only subtitle text is sent, and only after you click Translate. No timings, file names, video, audio, page URL or browsing data are sent.
+- Google states that text sent to Cloud Translation is held in memory only to translate it, and is not used to train its models ([data usage](https://docs.cloud.google.com/translate/data-usage)).
+- No analytics. Dialogue is never logged. The job is kept in memory-only session storage until you clear it or close the browser.
+
+### Translation quality
+
+Translations come from Google's general NMT model with no style options. The v2 API offers none, so the popup shows none. Passing tests prove the mapping, timing and export, **not** that the Sinhala is good. Expect problems with idioms, slang, names and tone. Formality and pronouns (ඔයා / ඔබ) will be uneven. Real quality needs review by Sinhala speakers.
+
+`test-page/fixtures/translation-eval-en.srt` is a small, original, copyright-free review set covering:
+- simple conversation;
+- questions;
+- emotional dialogue;
+- idioms ("a piece of cake", "beat around the bush");
+- slang;
+- two speakers in one cue;
+- proper nouns (Nimal, Kumari, Kandy, Galle);
+- a long two-line sentence;
+- overlapping and repeated cues.
+
+Translate it, download **Review**, and have a Sinhala speaker check each line. No BLEU, chrF or other score has been measured.
 
 ## API setup
 
@@ -265,13 +357,13 @@ save settings → chrome.storage ──onChanged────▶   └ updates th
 - It covers only the provider's own domain. There is no `<all_urls>`.
 - SubLanka still touches a web page only after you click its toolbar icon there.
 
-A module background service worker (`background.js`) handles downloads.
+A module background service worker (`background.js`) handles downloads and translation jobs. Translation needs no extra permission: Google allows CORS from extension origins.
 
 ## Project structure
 
 ```
 sublanka/
-├── public/manifest.json, icons/     # MV3 manifest (v0.3.0) and icons, copied to dist/
+├── public/manifest.json, icons/     # MV3 manifest (v0.4.0) and icons, copied to dist/
 ├── popup.html                       # popup entry
 ├── src/
 │   ├── subtitles/                   # pure parsing + search (popup side)
@@ -280,7 +372,8 @@ sublanka/
 │   │   ├── srtParser.ts, vttParser.ts
 │   │   ├── subtitleFile.ts          # extension, size and UTF-8 checks
 │   │   └── subtitleSearch.ts        # cue index + binary search for active cues
-│   ├── background/                  # service worker: download → parse → load (Milestone 3)
+│   ├── background/                  # service worker: downloads (Milestone 3) and translation jobs (Milestone 4)
+│   ├── translation/                 # provider interface, Google adapter, batch job, SRT/VTT export (Milestone 4)
 │   ├── discovery/                   # media detection, match ranking (Milestone 3)
 │   ├── providers/                   # provider-neutral types + OpenSubtitles adapter (Milestone 3)
 │   ├── content/
@@ -317,7 +410,7 @@ Load it in Chrome:
 
 1. Open `chrome://extensions`
 2. Turn on **Developer mode** (top right)
-3. Click **Load unpacked** and select the `dist/` folder. If you are upgrading from an earlier version, click the reload icon on the SubLanka card instead. Version 0.3.0 asks for one new permission, access to opensubtitles.com.
+3. Click **Load unpacked** and select the `dist/` folder. If you are upgrading from an earlier version, click the reload icon on the SubLanka card instead. Version 0.4.0 asks for no new permissions.
 4. Pin SubLanka from the extensions (puzzle) menu
 5. Reload any tabs that were open before installing or updating
 
@@ -363,7 +456,7 @@ The page also lists a checklist. Opening it straight from disk (`file://`) works
 
 ### Automated tests
 
-`npm test` runs 192 Vitest tests in jsdom. No test makes a real network request: every provider response comes from `src/providers/opensubtitles/fixtures.ts` or inline mocks. They cover:
+`npm test` runs 255 Vitest tests in jsdom. No test makes a real network request: every provider response comes from `src/providers/opensubtitles/fixtures.ts` or inline mocks. They cover:
 - media detection (JSON-LD, Open Graph, tab title, heading, episode notations, bracketed years, false positives, conflicting and missing metadata, Netflix-style pages);
 - the OpenSubtitles client (parameters and headers, search, episodes, pagination, empty results, 401/403/406/410/429/5xx, network errors, malformed JSON, cancellation, host allow-listing, capped download, HTML rejection, redirects, login, token storage, expired sign-in);
 - match ranking (exact movie, wrong year, correct/wrong episode, multiple releases, ambiguous titles, missing identifiers);
@@ -374,7 +467,14 @@ The page also lists a checklist. Opening it straight from disk (`file://`) works
 - file checks and settings validation;
 - message validation and the popup ↔ tab bridge (with a mocked `chrome` API);
 - the playback controller (seek, pause, rate, end, offset, overlaps, video selection and replacement, no duplicate listeners);
-- the overlay (appearance, no duplicates, cleanup, top-layer ordering).
+- the overlay (appearance, no duplicates, cleanup, top-layer ordering);
+- translation (Milestone 4), using a deterministic fake provider and mocked `fetch`, never a real key:
+  - the Google adapter: request shape, key sent in a header, the real invalid-key response, disabled API, rate limit, quota, 5xx, network failure, cancellation;
+  - responses with too few or too many lines, empty or non-string lines, which are rejected rather than guessed;
+  - batching by segment and character limits, a 1,200-cue file, repeated lines sent once, backoff on transient errors, no retry on key/quota/validation errors, partial failure keeping finished batches, late replies after cancel;
+  - the worker job: completion, duplicate-start refusal, cancel and resume (only missing cues are sent), an interrupted worker, failures, edits, oversized input, clearing;
+  - export: SRT and WebVTT round-trip through the existing parsers with identical timing, overlaps, multiline cues, Sinhala, HTML-like text, `-->` in text, pinned positions, safe filenames;
+  - the Translate tab: setup required, local upload with nothing sent before consent, unsupported files, live progress, cancel, resume, preview, editing (HTML stays plain text), applying through `load-track`, SRT/VTT downloads, worker errors.
 
 jsdom has no media playback, Popover API, or fullscreen. Those tests drive fake videos and a simulated top layer, so they check SubLanka's logic, not the browser's rendering.
 
@@ -382,7 +482,10 @@ jsdom has no media playback, Popover API, or fullscreen. Those tests drive fake 
 
 | | Status |
 | --- | --- |
-| Type check, lint, 192 unit tests, production build | Run and passing |
+| Type check, lint, 255 unit tests, production build | Run and passing |
+| Google Translation v2 endpoint, request/response fields, 128 strings per request, 100 KB request cap, `en`/`si` NMT support | From the official docs |
+| Google CORS for `chrome-extension://` origins with `X-Goog-Api-Key`; invalid-key error shape (`400`, `API_KEY_INVALID`) | Checked live with curl and a fake key |
+| **Real English → Sinhala translations** | **Not tested.** No Google Cloud key was available. Whether `format: text` keeps line breaks inside a cue is unverified |
 | Sinhala language code `si` ("Sinhalese") | Checked live against `GET /infos/languages` |
 | API CORS (`Access-Control-Allow-Origin: *`, all headers allowed) | Checked live |
 | Search without a valid key → 403 "You cannot consume this service" | Checked live; mapped to the API-key message |
@@ -408,9 +511,20 @@ Response fields were taken from the official docs and cross-checked against Baza
 7. Try a TV search (_Stranger Things_, S1 E3), a title with no Sinhala subtitles, and an invalid key.
 8. On the `service_worker` link in `chrome://extensions`, check the worker's console for errors.
 
+### Manual testing of translation with a real key
+
+1. **Settings → Translation**: save a Google Cloud Translation API key.
+2. **Translate**: choose `test-page/fixtures/translation-eval-en.srt` and click **Agree and translate to Sinhala**. Progress should reach 11 / 11.
+3. Check that cue 2's two lines are still two lines, cues 10 and 11 overlap, and the names stay recognisable.
+4. Start again and close the popup mid-way, then reopen it. The job should still be running or done. Try **Cancel**, then **Resume**.
+5. Edit a cue, then **Apply Sinhala subtitles** on the test page. The overlay should show your edit at the cue's original time. Change the offset and appearance to confirm they still apply.
+6. Download SRT and VTT, and load each one in the **Subtitles** tab.
+7. Try an invalid key and a key for a project without the API enabled.
+
 ## Known limitations
 
-- **Live provider behaviour is unverified** (see above).
+- **Live provider behaviour is unverified** (see above), for both OpenSubtitles and Google Cloud Translation.
+- **Translation**: machine output that has not been reviewed by a human. Context ends at each cue. Only one job runs at a time. The job and its edits last until the browser closes. Only local English files can be translated. Google bills the user's own project.
 - **OpenSubtitles catalogue**: Sinhala coverage is limited. Many titles have no Sinhala subtitles. Sinhala files made for legacy non-Unicode fonts (ASCII text drawn with a special font) would appear as Latin characters; SubLanka does not convert them.
 - **Downloads are always converted to SRT** by the provider. Multi-CD subtitles load part 1 only, and the result says so.
 - **Anonymous downloads** share a small per-IP daily quota. Sign in for more.
@@ -434,9 +548,12 @@ Response fields were taken from the official docs and cross-checked against Baza
 
 ## Roadmap
 
-- **Milestone 3 (this release):** Sinhala subtitle search and download from OpenSubtitles.com, page metadata detection, tabbed popup.
-- **Milestone 4 (planned):**
-  - English → Sinhala translation of user-supplied subtitle files;
+- **Milestone 3:** Sinhala subtitle search and download from OpenSubtitles.com, page metadata detection, tabbed popup.
+- **Milestone 4 (this release):** English → Sinhala translation of local subtitle files with Google Cloud Translation, preview and editing, SRT/WebVTT export.
+- **Milestone 5 (proposed):**
+  - verify live translation and OpenSubtitles with real keys, and have Sinhala speakers review the evaluation set;
+  - a key proxy for a public release (translation and OpenSubtitles);
+  - translating the track already loaded on the page;
   - verify and harden the live OpenSubtitles integration with real credentials;
   - decide on a key proxy for a public release;
   - optionally remember the last file per site, with consent;
