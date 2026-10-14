@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "SubLanka",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Sinhala-first browser extension for discovering, translating, and displaying subtitles.",
-  "permissions": ["activeTab", "scripting"],
+  "permissions": ["activeTab", "scripting", "storage"],
   "action": {
     "default_title": "SubLanka",
     "default_popup": "popup.html",
