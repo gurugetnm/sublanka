@@ -3,67 +3,117 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>SubLanka overlay test page</title>
+    <title>SubLanka test page</title>
     <style>
       body { margin: 0; padding: 24px 16px; font-family: system-ui, sans-serif; background: #f5f5f4; color: #1c1917; }
       main { max-width: 860px; margin: 0 auto; }
+      h2 { margin-top: 32px; font-size: 18px; }
       #player { position: relative; background: #000; border-radius: 12px; overflow: hidden; }
       video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
-      .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-      button, label { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; cursor: pointer; }
-      p { line-height: 1.6; }
+      .readout { display: flex; flex-wrap: wrap; gap: 16px; margin: 12px 0 4px; font: 600 15px ui-monospace, monospace; }
+      .readout span { padding: 4px 10px; border-radius: 8px; background: #fff; border: 1px solid #d6d3d1; }
+      .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+      button, label, select { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; cursor: pointer; }
+      #second { width: 420px; max-width: 100%; }
+      #preview { width: 120px; height: 68px; aspect-ratio: auto; border-radius: 6px; }
+      p, li { line-height: 1.6; }
+      code { background: #e7e5e4; padding: 1px 5px; border-radius: 4px; }
     </style>
   </head>
   <body>
     <main>
-      <h1>SubLanka overlay test page</h1>
+      <h1>SubLanka test page</h1>
       <p>
-        The video below is generated locally from a canvas (no downloads, no copyrighted media). You can also load your
-        own video file. Open the SubLanka popup and click <strong>Show Demo Subtitle</strong>.
+        The clip is a generated 2-minute test pattern (no copyrighted media) with a seconds counter burned into the
+        frame. Load <code>test-page/fixtures/sample-si.srt</code> or <code>sample-si.vtt</code> from the SubLanka popup:
+        each subtitle starts with its expected time, for example <code>(0:10)</code>, so you can compare it with the
+        readout below.
       </p>
 
       <div id="player">
-        <video id="video" controls muted playsinline></video>
+        <video id="main" controls playsinline preload="auto" src="media/test-clip.webm"></video>
+      </div>
+
+      <div class="readout" aria-live="off">
+        <span>currentTime <output id="time">0.000</output>s</span>
+        <span>rate <output id="rate">1</output>×</span>
+        <span id="state">paused</span>
       </div>
 
       <div class="controls">
-        <button id="fullscreen-player" type="button">Fullscreen player container</button>
-        <button id="fullscreen-video" type="button">Fullscreen bare &lt;video&gt;</button>
+        <button type="button" data-action="toggle">Play / pause</button>
+        <button type="button" data-seek="-10">−10s</button>
+        <button type="button" data-seek="-1">−1s</button>
+        <button type="button" data-seek="1">+1s</button>
+        <button type="button" data-seek="10">+10s</button>
+        <button type="button" data-goto="9.5">Go to 0:09.5</button>
+        <select id="speed" aria-label="Playback speed">
+          <option value="0.5">0.5×</option>
+          <option value="1" selected>1×</option>
+          <option value="1.5">1.5×</option>
+          <option value="2">2×</option>
+        </select>
+      </div>
+      <div class="controls">
+        <button type="button" id="fullscreen-player">Fullscreen player container</button>
+        <button type="button" id="fullscreen-video">Fullscreen bare &lt;video&gt;</button>
+        <button type="button" id="swap">Replace video element</button>
         <label>Load local video… <input id="file" type="file" accept="video/*" hidden /></label>
       </div>
 
-      <p>Click the video and page controls while the subtitle is showing; the overlay should never block them.</p>
+      <h2>Second player</h2>
+      <p>With both players on the page, the popup shows a video picker. Starting this player moves the subtitles here.</p>
+      <video id="second" controls playsinline preload="metadata" src="media/test-clip.webm"></video>
+
+      <h2>Tiny preview video</h2>
+      <p>Below the 160×90 threshold, so SubLanka should never pick it, even while it plays.</p>
+      <video id="preview" muted loop autoplay playsinline src="media/test-clip.webm"></video>
+
+      <h2>Checklist</h2>
+      <ul>
+        <li>Subtitles appear and disappear at the times shown in brackets, during gaps nothing is shown.</li>
+        <li>Pausing keeps the current subtitle; seeking shows the right one immediately; 2× stays in sync.</li>
+        <li>Delay +2s makes <code>(0:10)</code> appear at 12s; −1s makes it appear at 9s.</li>
+        <li><code>overlapping-si.vtt</code> shows two lines between 4s and 6s, and between 10s and 12s.</li>
+        <li><code>malformed-si.srt</code> loads 3 cues and reports 5 skipped blocks.</li>
+        <li>Both fullscreen buttons keep the subtitle visible. “Replace video element” keeps subtitles working.</li>
+      </ul>
     </main>
 
     <script>
-      const video = document.getElementById('video');
-      const canvas = document.createElement('canvas');
-      canvas.width = 1280;
-      canvas.height = 720;
-      const ctx = canvas.getContext('2d');
-      const start = performance.now();
-      (function draw(now) {
-        const t = (now - start) / 1000;
-        ctx.fillStyle = `hsl(${(t * 20) % 360} 45% 22%)`;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(640 + Math.cos(t) * 360, 300 + Math.sin(t * 1.3) * 140, 48, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.font = '600 40px system-ui';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Test video  ${t.toFixed(1)}s`, 640, 90);
-        requestAnimationFrame(draw);
-      })(start);
-      video.srcObject = canvas.captureStream(30);
-      video.play().catch(() => {});
+      let video = document.getElementById('main');
+      const time = document.getElementById('time');
+      const rate = document.getElementById('rate');
+      const state = document.getElementById('state');
 
+      (function tick() {
+        time.textContent = video.currentTime.toFixed(3);
+        rate.textContent = video.playbackRate;
+        state.textContent = video.ended ? 'ended' : video.paused ? 'paused' : 'playing';
+        requestAnimationFrame(tick);
+      })();
+
+      document.querySelector('[data-action="toggle"]').onclick = () => (video.paused ? video.play() : video.pause());
+      for (const button of document.querySelectorAll('[data-seek]')) {
+        button.onclick = () => (video.currentTime = Math.max(0, video.currentTime + Number(button.dataset.seek)));
+      }
+      document.querySelector('[data-goto]').onclick = (event) => (video.currentTime = Number(event.target.dataset.goto));
+      document.getElementById('speed').onchange = (event) => (video.playbackRate = Number(event.target.value));
       document.getElementById('fullscreen-player').onclick = () => document.getElementById('player').requestFullscreen();
       document.getElementById('fullscreen-video').onclick = () => video.requestFullscreen();
+
+      // Simulates sites that swap the <video> element, e.g. between episodes.
+      document.getElementById('swap').onclick = () => {
+        const replacement = video.cloneNode();
+        replacement.id = 'main';
+        replacement.currentTime = video.currentTime;
+        video.replaceWith(replacement);
+        video = replacement;
+      };
+
       document.getElementById('file').onchange = (event) => {
         const file = event.target.files[0];
         if (!file) return;
-        video.srcObject = null;
         video.src = URL.createObjectURL(file);
         video.play().catch(() => {});
       };
