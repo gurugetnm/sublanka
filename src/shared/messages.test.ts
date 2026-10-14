@@ -1,15 +1,47 @@
 import { describe, expect, it } from 'vitest';
-import { isSubLankaMessage } from './messages';
+import { isSubLankaMessage, isSubtitleCue } from './messages';
+
+const cue = { index: 0, startTime: 1, endTime: 2, text: 'ආයුබෝවන්' };
 
 describe('isSubLankaMessage', () => {
-  it('accepts valid messages', () => {
-    expect(isSubLankaMessage({ type: 'sublanka:show-subtitle', text: 'x' })).toBe(true);
-    expect(isSubLankaMessage({ type: 'sublanka:hide-subtitle' })).toBe(true);
+  it('accepts every valid message', () => {
+    for (const message of [
+      { type: 'sublanka:get-state' },
+      { type: 'sublanka:remove-track' },
+      { type: 'sublanka:load-track', fileName: 'a.srt', cues: [cue] },
+      { type: 'sublanka:set-enabled', enabled: false },
+      { type: 'sublanka:set-demo', visible: true },
+      { type: 'sublanka:select-video', videoId: 3 },
+    ]) {
+      expect(isSubLankaMessage(message)).toBe(true);
+    }
   });
 
-  it('rejects anything else', () => {
-    for (const value of [null, 'x', {}, { type: 'other' }, { type: 'sublanka:show-subtitle' }, { type: 'sublanka:show-subtitle', text: 1 }]) {
+  it('rejects unknown, malformed or partially valid messages', () => {
+    for (const value of [
+      null,
+      'sublanka:get-state',
+      {},
+      { type: 'other' },
+      { type: 'sublanka:show-subtitle', text: 'old protocol' },
+      { type: 'sublanka:load-track', fileName: 'a.srt', cues: [] },
+      { type: 'sublanka:load-track', fileName: 'a.srt', cues: [cue, { ...cue, endTime: 0 }] },
+      { type: 'sublanka:load-track', cues: [cue] },
+      { type: 'sublanka:set-enabled', enabled: 'yes' },
+      { type: 'sublanka:select-video', videoId: 1.5 },
+    ]) {
       expect(isSubLankaMessage(value)).toBe(false);
     }
+  });
+});
+
+describe('isSubtitleCue', () => {
+  it('rejects negative, reversed, infinite or empty cues', () => {
+    expect(isSubtitleCue(cue)).toBe(true);
+    expect(isSubtitleCue({ ...cue, startTime: -1 })).toBe(false);
+    expect(isSubtitleCue({ ...cue, endTime: 1 })).toBe(false);
+    expect(isSubtitleCue({ ...cue, endTime: Infinity })).toBe(false);
+    expect(isSubtitleCue({ ...cue, text: '' })).toBe(false);
+    expect(isSubtitleCue({ ...cue, index: '0' })).toBe(false);
   });
 });
