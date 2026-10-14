@@ -1,6 +1,8 @@
-import { FileText, LoaderCircle, Upload } from 'lucide-react';
+import { FileText, LoaderCircle, Search, Upload } from 'lucide-react';
 import { useRef } from 'react';
-import type { PlayerState } from '../../shared/messages';
+import type { PlayerState, SubtitleSource } from '../../shared/messages';
+
+const SOURCE_LABELS: Record<SubtitleSource, string> = { local: 'Local upload', opensubtitles: 'OpenSubtitles' };
 import { Card, SECONDARY_BUTTON, Switch } from './ui';
 
 function trackStatus(state: PlayerState): { label: string; className: string } {
@@ -19,6 +21,7 @@ export function SubtitleTrackCard({
   onFile,
   onRemove,
   onSetEnabled,
+  onSearch,
 }: {
   state: PlayerState | null;
   disabled: boolean;
@@ -27,6 +30,7 @@ export function SubtitleTrackCard({
   onFile: (file: File) => void;
   onRemove: () => void;
   onSetEnabled: (enabled: boolean) => void;
+  onSearch: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const track = state?.track ?? null;
@@ -58,13 +62,21 @@ export function SubtitleTrackCard({
               <p className="truncate text-sm font-medium" title={track.fileName}>
                 {track.fileName}
               </p>
-              <p className="text-xs text-stone-500 dark:text-stone-400">{track.cueCount.toLocaleString()} cues</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">
+                {track.cueCount.toLocaleString()} cues · {SOURCE_LABELS[track.source]}
+              </p>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2">
             <Switch checked={state.subtitlesEnabled} label="Show subtitles" disabled={disabled} onChange={onSetEnabled} />
             <div className="ml-auto flex gap-1.5">
-              <button type="button" className={SECONDARY_BUTTON} disabled={disabled} onClick={() => inputRef.current?.click()}>
+              <button
+                type="button"
+                className={SECONDARY_BUTTON}
+                disabled={disabled}
+                onClick={() => inputRef.current?.click()}
+                title="Replace with a file from this device"
+              >
                 Replace
               </button>
               <button type="button" className={SECONDARY_BUTTON} disabled={disabled} onClick={onRemove}>
@@ -90,6 +102,13 @@ export function SubtitleTrackCard({
         </button>
       )}
 
+      {!(state && track) && (
+        <button type="button" className={`${SECONDARY_BUTTON} mt-2 w-full py-1.5`} onClick={onSearch}>
+          <Search className="size-3.5" aria-hidden="true" />
+          Search Sinhala subtitles online
+        </button>
+      )}
+
       {warnings.length > 0 && (
         <div className="mt-2 rounded-md bg-amber-50 p-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
           <p className="font-medium">
@@ -105,7 +124,7 @@ export function SubtitleTrackCard({
       )}
 
       <p className="mt-2 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-        Files are read on your device and never uploaded. Reloading the page clears the loaded file.
+        Local files are read on your device and never uploaded. Reloading the page clears the loaded subtitles.
       </p>
     </Card>
   );

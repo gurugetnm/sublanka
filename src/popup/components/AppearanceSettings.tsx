@@ -1,5 +1,5 @@
 import type { SubtitleSettings } from '../../shared/settings';
-import { Disclosure } from './ui';
+import { Card } from './ui';
 
 export interface Option<T extends string> {
   value: T;
@@ -69,7 +69,7 @@ export function AppearanceSettings({
   onChange: (patch: Partial<SubtitleSettings>) => void;
 }) {
   return (
-    <Disclosure title="Appearance">
+    <Card title="Appearance">
       {settings === null ? (
         <p className="text-xs text-stone-500">Loading settings…</p>
       ) : (
@@ -79,6 +79,6 @@ export function AppearanceSettings({
           <SegmentedControl label="Background" name="background" value={settings.background} options={BACKGROUND_OPTIONS} onChange={(background) => onChange({ background })} />
         </div>
       )}
-    </Disclosure>
+    </Card>
   );
 }
