@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SubLanka overlay test page</title>
+    <style>
+      body { margin: 0; padding: 24px 16px; font-family: system-ui, sans-serif; background: #f5f5f4; color: #1c1917; }
+      main { max-width: 860px; margin: 0 auto; }
+      #player { position: relative; background: #000; border-radius: 12px; overflow: hidden; }
+      video { display: block; width: 100%; aspect-ratio: 16 / 9; background: #000; }
+      .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+      button, label { font: inherit; font-size: 14px; padding: 6px 12px; border: 1px solid #d6d3d1; border-radius: 8px; background: #fff; cursor: pointer; }
+      p { line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>SubLanka overlay test page</h1>
+      <p>
+        The video below is generated locally from a canvas (no downloads, no copyrighted media). You can also load your
+        own video file. Open the SubLanka popup and click <strong>Show Demo Subtitle</strong>.
+      </p>
+
+      <div id="player">
+        <video id="video" controls muted playsinline></video>
+      </div>
+
+      <div class="controls">
+        <button id="fullscreen-player" type="button">Fullscreen player container (overlay follows)</button>
+        <button id="fullscreen-video" type="button">Fullscreen bare &lt;video&gt; (known limitation)</button>
+        <label>Load local video… <input id="file" type="file" accept="video/*" hidden /></label>
+      </div>
+
+      <p>Click the video and page controls while the subtitle is showing; the overlay should never block them.</p>
+    </main>
+
+    <script>
+      const video = document.getElementById('video');
+      const canvas = document.createElement('canvas');
+      canvas.width = 1280;
+      canvas.height = 720;
+      const ctx = canvas.getContext('2d');
+      const start = performance.now();
+      (function draw(now) {
+        const t = (now - start) / 1000;
+        ctx.fillStyle = `hsl(${(t * 20) % 360} 45% 22%)`;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(640 + Math.cos(t) * 360, 300 + Math.sin(t * 1.3) * 140, 48, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.font = '600 40px system-ui';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Test video  ${t.toFixed(1)}s`, 640, 90);
+        requestAnimationFrame(draw);
+      })(start);
+      video.srcObject = canvas.captureStream(30);
+      video.play().catch(() => {});
+
+      document.getElementById('fullscreen-player').onclick = () => document.getElementById('player').requestFullscreen();
+      document.getElementById('fullscreen-video').onclick = () => video.requestFullscreen();
+      document.getElementById('file').onchange = (event) => {
+        const file = event.target.files[0];
+        if (!file) return;
+        video.srcObject = null;
+        video.src = URL.createObjectURL(file);
+        video.play().catch(() => {});
+      };
+    </script>
+  </body>
+</html>
