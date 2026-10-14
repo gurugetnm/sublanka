@@ -155,6 +155,43 @@ describe('TranslatePanel', () => {
     expect(container.textContent).toContain('<b>නව</b>');
   });
 
+  it('edits from the keyboard: focus moves to the editor, Escape cancels and Ctrl+Enter saves', async () => {
+    mocks.requestTranslation.mockResolvedValue({ ok: true, job: job() });
+    await render();
+    const key = (target: Element, init: KeyboardEventInit) => act(async () => target.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init })));
+
+    await click('Edit');
+    let textarea = container.querySelector('textarea');
+    expect(document.activeElement).toBe(textarea);
+    await key(textarea as Element, { key: 'Escape' });
+    expect(container.querySelector('textarea')).toBeNull();
+
+    await click('Edit');
+    textarea = container.querySelector('textarea');
+    await key(textarea as Element, { key: 'Enter', ctrlKey: true });
+    expect(mocks.requestTranslation).toHaveBeenLastCalledWith({ action: 'edit', index: 0, text: job().translations[0] });
+    expect(container.querySelector('textarea')).toBeNull();
+  });
+
+  it('keeps the preview in one scroll area by paging long translations', async () => {
+    const many = Array.from({ length: 25 }, (_, index) => ({ index, startTime: index, endTime: index + 0.5, text: `Line ${index + 1}` }));
+    mocks.requestTranslation.mockResolvedValue({ ok: true, job: job({ cues: many, translations: many.map(() => 'අ') }) });
+    await render();
+    expect(container.querySelectorAll('ol > li')).toHaveLength(10);
+    expect(container.querySelector('ol')?.className).not.toContain('overflow');
+    expect(container.textContent).toContain('Page 1 of 3');
+    await click('Next');
+    expect(container.textContent).toContain('Line 11');
+  });
+
+  it('accepts an English file dropped on the upload area', async () => {
+    await render();
+    const zone = button(/Choose or drop an English/);
+    const event = Object.assign(new Event('drop', { bubbles: true, cancelable: true }), { dataTransfer: { files: [new File([SRT], 'film.en.srt')] } });
+    await act(async () => zone?.dispatchEvent(event));
+    expect(container.textContent).toContain('2 subtitles');
+  });
+
   it('applies the translation through the existing load-track message with the original timings', async () => {
     mocks.requestTranslation.mockResolvedValue({ ok: true, job: job() });
     mocks.sendToTab.mockResolvedValue(STATE);

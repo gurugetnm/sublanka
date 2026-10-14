@@ -1,4 +1,4 @@
-import { Check, Download, FileText, Languages, LoaderCircle, Settings, Upload } from 'lucide-react';
+import { Check, Download, FileText, Languages, LoaderCircle, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { PlayerState } from '../../shared/messages';
 import { readSubtitleFile } from '../../subtitles/subtitleFile';
@@ -15,11 +15,10 @@ import {
 } from '../../translation/translationJob';
 import { requestTranslation, sendToTab } from '../tabBridge';
 import { TranslationPreview } from './TranslationPreview';
-import { Card, PRIMARY_BUTTON, SECONDARY_BUTTON } from './ui';
+import { Card, ErrorBox, FileInput, FilePicker, HELP, PRIMARY_BUTTON, SECONDARY_BUTTON } from './ui';
 
 const provider = googleTranslateProvider;
 const CONSENT_KEY = 'translationConsent';
-const HELP = 'text-[11px] leading-relaxed text-stone-500 dark:text-stone-400';
 
 interface SourceFile {
   fileName: string;
@@ -146,26 +145,7 @@ export function TranslatePanel({
     }
   }
 
-  const fileInput = (
-    <input
-      ref={inputRef}
-      type="file"
-      accept=".srt,.vtt"
-      className="hidden"
-      tabIndex={-1}
-      onChange={(event) => {
-        const file = event.target.files?.[0];
-        event.target.value = '';
-        if (file) void chooseFile(file);
-      }}
-    />
-  );
-
-  const errorBox = error && (
-    <p role="alert" className="mt-2 rounded-md bg-red-50 px-2.5 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
-      {error}
-    </p>
-  );
+  const errorBox = error && <ErrorBox className="mt-2">{error}</ErrorBox>;
 
   // A job in progress or with results takes over the panel until the user clears it.
   if (job) {
@@ -174,7 +154,7 @@ export function TranslatePanel({
     return (
       <Card title="Translation">
         <div className="flex items-center gap-2.5">
-          <FileText className="size-4 shrink-0 text-stone-400" aria-hidden="true" />
+          <FileText className="size-4 shrink-0 text-stone-500 dark:text-stone-400" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium" title={job.fileName}>
               {job.fileName}
@@ -185,15 +165,15 @@ export function TranslatePanel({
           </div>
         </div>
 
-        <div className="mt-3" aria-live="polite">
+        <div className="mt-3">
           <Progress job={job} />
           {job.status === 'done' && (
-            <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-800 dark:text-emerald-300">
+            <p role="status" className="mt-2 flex items-center gap-1.5 text-xs font-medium text-emerald-800 dark:text-emerald-300">
               <Check className="size-3.5" aria-hidden="true" /> Translation complete. Review it below before applying.
             </p>
           )}
-          {job.message && <p className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{job.message}</p>}
-          {notice && <p className="mt-2 text-xs text-emerald-800 dark:text-emerald-300">{notice}</p>}
+          {job.message && <p role="status" className="mt-2 rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">{job.message}</p>}
+          {notice && <p role="status" className="mt-2 text-xs text-emerald-800 dark:text-emerald-300">{notice}</p>}
         </div>
         {errorBox}
 
@@ -281,10 +261,10 @@ export function TranslatePanel({
         )
       }
     >
-      {fileInput}
       {source ? (
         <div className="flex items-center gap-2.5">
-          <FileText className="size-4 shrink-0 text-stone-400" aria-hidden="true" />
+          <FileInput inputRef={inputRef} onFile={(file) => void chooseFile(file)} />
+          <FileText className="size-4 shrink-0 text-stone-500 dark:text-stone-400" aria-hidden="true" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium" title={source.fileName}>
               {source.fileName}
@@ -298,15 +278,11 @@ export function TranslatePanel({
           </button>
         </div>
       ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-stone-300 px-3 py-4 text-sm hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 dark:border-stone-700 dark:hover:bg-stone-800"
-        >
-          <Upload className="size-5 text-stone-400" aria-hidden="true" />
-          <span className="font-medium">Choose an English .srt or .vtt file</span>
-          <span className="text-xs text-stone-500 dark:text-stone-400">Read on your device. Nothing is sent until you click Translate.</span>
-        </button>
+        <FilePicker
+          title="Choose or drop an English .srt or .vtt file"
+          detail="Read on your device. Nothing is sent until you click Translate."
+          onFile={(file) => void chooseFile(file)}
+        />
       )}
 
       {source && source.warnings.length > 0 && (
