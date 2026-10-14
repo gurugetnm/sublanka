@@ -141,7 +141,7 @@ The popup and the worker only use the provider-neutral types; nothing outside `p
 | `GET <link>` | The file itself. No API key or token is sent. |
 | `POST /login` | Optional. `{ username, password }` returns `token` and `base_url`. |
 
-Every API request carries `Api-Key` and `X-User-Agent: SubLanka v0.4.0`. The docs ask for a `User-Agent` naming the app, and browsers do not let extensions set `User-Agent`; the API accepts `X-User-Agent` instead. A signed-in request also carries `Authorization: Bearer <token>`.
+Every API request carries `Api-Key` and `X-User-Agent: SubLanka v1.0.0`. The docs ask for a `User-Agent` naming the app, and browsers do not let extensions set `User-Agent`; the API accepts `X-User-Agent` instead. A signed-in request also carries `Authorization: Bearer <token>`.
 
 Errors are mapped to messages:
 
@@ -417,7 +417,7 @@ A module background service worker (`background.js`) handles downloads and trans
 
 ```
 sublanka/
-├── public/manifest.json, icons/     # MV3 manifest (v0.4.0) and icons, copied to dist/
+├── public/manifest.json, icons/     # MV3 manifest (v1.0.0) and icons, copied to dist/
 ├── popup.html                       # popup entry
 ├── src/
 │   ├── subtitles/                   # pure parsing + search (popup side)
@@ -466,7 +466,7 @@ Load it in Chrome:
 
 1. Open `chrome://extensions`
 2. Turn on **Developer mode** (top right)
-3. Click **Load unpacked** and select the `dist/` folder. If you are upgrading from an earlier version, click the reload icon on the SubLanka card instead. Version 0.4.0 asks for no new permissions.
+3. Click **Load unpacked** and select the `dist/` folder. If you are upgrading from an earlier version, click the reload icon on the SubLanka card instead. Version 1.0.0 asks for no new permissions.
 4. Pin SubLanka from the extensions (puzzle) menu
 5. Reload any tabs that were open before installing or updating
 
