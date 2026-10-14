@@ -1,3 +1,4 @@
+import type { TitleSuggestion } from '../metadata/tmdb';
 import type { MediaKind, SearchPage, SubtitleQuery } from '../providers/types';
 
 /** What the user typed. Kept as strings so half-typed numbers survive a popup reopen. */
@@ -7,6 +8,8 @@ export interface SearchForm {
   year: string;
   season: string;
   episode: string;
+  /** The TMDB title picked from suggestions; null for a free-typed title. Cleared whenever the title or type changes. */
+  selected: TitleSuggestion | null;
 }
 
 export interface SavedSearch {
@@ -15,7 +18,7 @@ export interface SavedSearch {
   results: { query: SubtitleQuery; page: SearchPage } | null;
 }
 
-export const EMPTY_FORM: SearchForm = { kind: 'movie', title: '', year: '', season: '', episode: '' };
+export const EMPTY_FORM: SearchForm = { kind: 'movie', title: '', year: '', season: '', episode: '', selected: null };
 
 /**
  * chrome.storage.session: memory only, cleared when the browser closes, readable only by extension pages.
@@ -27,7 +30,28 @@ function parseForm(value: unknown): SearchForm | null {
   if (typeof value !== 'object' || value === null) return null;
   const form = value as Record<string, unknown>;
   const strings = ['title', 'year', 'season', 'episode'].every((key) => typeof form[key] === 'string');
-  return strings && (form.kind === 'movie' || form.kind === 'episode') ? (form as unknown as SearchForm) : null;
+  if (!strings || (form.kind !== 'movie' && form.kind !== 'episode')) return null;
+  return { ...(form as unknown as SearchForm), selected: parseSelected(form.selected, form.kind, form.title as string) };
+}
+
+/** A saved selection is kept only if it is well formed and still belongs to the saved title and type. */
+function parseSelected(value: unknown, kind: MediaKind, title: string): TitleSuggestion | null {
+  if (typeof value !== 'object' || value === null) return null;
+  const { tmdbId, title: selectedTitle, year, posterPath, kind: selectedKind } = value as Record<string, unknown>;
+  const valid =
+    Number.isSafeInteger(tmdbId) &&
+    (tmdbId as number) > 0 &&
+    selectedKind === kind &&
+    selectedTitle === title &&
+    (year === null || Number.isInteger(year)) &&
+    (posterPath === null || typeof posterPath === 'string');
+  return valid ? (value as TitleSuggestion) : null;
+}
+
+/** The TMDB id to search with, only while the form still shows exactly the title that was picked. */
+export function selectedTmdbId(form: SearchForm): number | undefined {
+  const { selected } = form;
+  return selected && selected.kind === form.kind && selected.title === form.title.trim() ? selected.tmdbId : undefined;
 }
 
 export async function loadSearchState(): Promise<SavedSearch | null> {
@@ -50,8 +74,11 @@ export function buildQuery(form: SearchForm, language: string): SubtitleQuery | 
   const title = form.title.trim();
   if (!title) return 'Enter a movie or series title.';
   const query: SubtitleQuery = { kind: form.kind, title, language, page: 1 };
+  const tmdbId = selectedTmdbId(form);
+  if (tmdbId !== undefined) query.tmdbId = tmdbId;
 
-  if (form.year.trim()) {
+  // For a picked series the year is its first-air year, not the episode's, so it must not filter episodes.
+  if (form.year.trim() && !(form.kind === 'episode' && tmdbId !== undefined)) {
     const year = Number(form.year);
     if (!Number.isInteger(year) || year < 1880 || year > new Date().getFullYear() + 2) return 'Enter the year as four digits, e.g. 2014.';
     query.year = year;

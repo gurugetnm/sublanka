@@ -10,6 +10,7 @@ import { buildQuery, EMPTY_FORM, loadSearchState, saveSearchState, type SearchFo
 import { detectPageMedia, requestDownload } from '../tabBridge';
 import { SegmentedControl } from './AppearanceSettings';
 import { ResultCard } from './ResultCard';
+import { TitleField } from './TitleField';
 import { Card, PRIMARY_BUTTON, SECONDARY_BUTTON } from './ui';
 
 const provider = PROVIDERS.opensubtitles;
@@ -51,6 +52,7 @@ function formFromMedia(media: DetectedMedia): SearchForm {
     year: media.year?.toString() ?? '',
     season: media.season?.toString() ?? '',
     episode: media.episode?.toString() ?? '',
+    selected: null,
   };
 }
 
@@ -67,6 +69,7 @@ export function SearchPanel({
   tabId,
   currentTrack,
   account,
+  tmdbReady,
   onOpenSettings,
   onTrackLoaded,
 }: {
@@ -74,6 +77,8 @@ export function SearchPanel({
   currentTrack: PlayerState['track'];
   /** null while loading. */
   account: AccountStatus | null;
+  /** Whether a TMDB key is saved for title suggestions; null while loading. */
+  tmdbReady: boolean | null;
   onOpenSettings: () => void;
   onTrackLoaded: (state: PlayerState, warnings: string[]) => void;
 }) {
@@ -156,8 +161,14 @@ export function SearchPanel({
     else setStatus({ phase: 'searching' });
 
     try {
-      const page = await provider.search(query, controller.signal);
+      let page = await provider.search(query, controller.signal);
       if (searchRef.current !== controller) return;
+      // OpenSubtitles may not know the TMDB id; fall back to the title (without the series' first-air year).
+      if (!previous && query.tmdbId !== undefined && page.results.length === 0) {
+        query = { ...query, tmdbId: undefined };
+        page = await provider.search(query, controller.signal);
+        if (searchRef.current !== controller) return;
+      }
       const seen = new Set(previous?.results.map((result) => result.id));
       const merged: SearchPage = previous
         ? { ...page, results: [...previous.results, ...page.results.filter((result) => !seen.has(result.id))] }
@@ -261,21 +272,20 @@ export function SearchPanel({
               { value: 'movie', label: 'Movie' },
               { value: 'episode', label: 'TV episode' },
             ]}
-            onChange={(kind) => updateForm({ kind })}
+            // A movie id is not a series id, so a change of type drops the selection.
+            onChange={(kind) => updateForm({ kind, selected: null })}
           />
-          <div>
-            <label htmlFor="search-title" className={LABEL}>
-              {form.kind === 'movie' ? 'Movie title' : 'Series title'}
-            </label>
-            <input
-              id="search-title"
-              className={INPUT}
-              value={form.title}
-              maxLength={200}
-              placeholder={form.kind === 'movie' ? 'e.g. Interstellar' : 'e.g. Stranger Things'}
-              onChange={(event) => updateForm({ title: event.target.value })}
-            />
-          </div>
+          <TitleField
+            key={form.kind}
+            kind={form.kind}
+            value={form.title}
+            selected={form.selected}
+            enabled={tmdbReady}
+            onType={(title) => updateForm({ title, selected: null })}
+            onSelect={(selected) => updateForm({ title: selected.title, year: selected.year?.toString() ?? '', selected })}
+            onClear={() => updateForm({ title: '', year: '', selected: null })}
+            onOpenSettings={onOpenSettings}
+          />
           <div className={`grid gap-2 ${form.kind === 'episode' ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <NumberField id="search-year" label="Year" optional value={form.year} onChange={(year) => updateForm({ year })} />
             {form.kind === 'episode' && (
@@ -380,11 +390,15 @@ export function SearchPanel({
       </section>
 
       <p className="px-1 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-        Only the title, year, season and episode above are sent to{' '}
+        Only the title, year, season and episode above (or the chosen TMDB title id) are sent to{' '}
         <a href="https://www.opensubtitles.com/" target="_blank" rel="noreferrer" className="underline">
           OpenSubtitles.com
         </a>
-        , which provides the subtitles.
+        , which provides the subtitles. Title suggestions send only what you type to{' '}
+        <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer" className="underline">
+          TMDB
+        </a>
+        .
       </p>
     </div>
   );

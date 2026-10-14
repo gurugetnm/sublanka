@@ -17,6 +17,8 @@ import { TimingCard } from './components/TimingCard';
 import { TranslatePanel } from './components/TranslatePanel';
 import { TranslationSettings } from './components/TranslationSettings';
 import { loadTranslationKeyStatus } from '../translation/googleTranslate';
+import { loadTmdbKeyStatus } from '../metadata/tmdb';
+import { TmdbSettings } from './components/TmdbSettings';
 import { connectToActiveTab, sendToTab, type TabConnection } from './tabBridge';
 
 const PAGE_ERROR = 'Could not reach the page. Reload it and try again.';
@@ -50,6 +52,7 @@ export function App() {
   const [section, setSection] = useState<Section>(initialSection);
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [translationReady, setTranslationReady] = useState<boolean | null>(null);
+  const [tmdbReady, setTmdbReady] = useState<boolean | null>(null);
 
   function openSection(next: Section) {
     setSection(next);
@@ -63,6 +66,7 @@ export function App() {
   useEffect(() => {
     loadAccountStatus().then(setAccount, () => setAccount({ hasApiKey: false, username: null }));
     loadTranslationKeyStatus().then(setTranslationReady, () => setTranslationReady(false));
+    loadTmdbKeyStatus().then(setTmdbReady, () => setTmdbReady(false));
     connectToActiveTab().then(setConnection, () => setConnection({ kind: 'unavailable' }));
     loadSettings()
       .catch(() => {
@@ -181,6 +185,7 @@ export function App() {
           tabId={tabId}
           currentTrack={state?.track ?? null}
           account={account}
+          tmdbReady={tmdbReady}
           onOpenSettings={() => openSection('settings')}
           onTrackLoaded={onTrackLoaded}
         />
@@ -200,6 +205,7 @@ export function App() {
         <PositionCard settings={settings} onChange={(patch) => updateSettings(() => patch)} />
         <AppearanceSettings settings={settings} onChange={(patch) => updateSettings(() => patch)} />
         <ProviderSettings account={account} onChange={setAccount} />
+        <TmdbSettings configured={tmdbReady} onChange={setTmdbReady} />
         <TranslationSettings configured={translationReady} onChange={setTranslationReady} />
         <DeveloperTools
           demoVisible={state?.demoVisible ?? false}
