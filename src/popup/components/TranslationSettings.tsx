@@ -1,10 +1,6 @@
 import { useState } from 'react';
 import { saveTranslationApiKey } from '../../translation/googleTranslate';
-import { Card, SECONDARY_BUTTON } from './ui';
-
-const INPUT =
-  'w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700 dark:border-stone-700 dark:bg-stone-950';
-const HELP = 'text-[11px] leading-relaxed text-stone-500 dark:text-stone-400';
+import { Card, HELP, INPUT, SECONDARY_BUTTON } from './ui';
 
 export function TranslationSettings({ configured, onChange }: { configured: boolean | null; onChange: (configured: boolean) => void }) {
   const [apiKey, setApiKey] = useState('');
@@ -39,7 +35,7 @@ export function TranslationSettings({ configured, onChange }: { configured: bool
         <p className="mt-2 text-xs text-stone-500">Loading…</p>
       ) : configured ? (
         <div className="mt-3 flex items-center gap-2">
-          <p className="flex-1 text-xs">API key saved on this device.</p>
+          <p className="flex-1 text-xs">API key saved on this device. It is not shown again.</p>
           <button type="button" className={SECONDARY_BUTTON} disabled={busy} onClick={() => void save('')}>
             Remove key
           </button>

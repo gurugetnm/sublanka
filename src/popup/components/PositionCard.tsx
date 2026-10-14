@@ -1,6 +1,6 @@
 import type { SubtitleSettings } from '../../shared/settings';
 import { SegmentedControl, type Option } from './AppearanceSettings';
-import { Card, Switch } from './ui';
+import { Card, HELP, Switch } from './ui';
 
 const POSITION_OPTIONS: Option<SubtitleSettings['position']>[] = [
   { value: 'very-low', label: 'Very low' },
@@ -19,7 +19,7 @@ export function PositionCard({
   onChange: (patch: Partial<SubtitleSettings>) => void;
 }) {
   return (
-    <Card title="Position">
+    <Card title="Position and watermarks">
       {settings === null ? (
         <p className="text-xs text-stone-500">Loading settings…</p>
       ) : (
@@ -31,13 +31,13 @@ export function PositionCard({
             options={POSITION_OPTIONS}
             onChange={(position) => onChange({ position })}
           />
-          <p className="mt-2 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+          <p className={`mt-2 ${HELP}`}>
             Move subtitles higher if they cover a watermark or text in the video.
           </p>
           <div className="mt-3">
             <Switch checked={settings.hideCredits} label="Hide credits and watermarks" onChange={(hideCredits) => onChange({ hideCredits })} />
           </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+          <p className={`mt-1 ${HELP}`}>
             Skips subtitle lines that stay on screen for over a minute, such as translator or site credits.
           </p>
         </>

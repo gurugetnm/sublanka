@@ -3,13 +3,11 @@ import { useEffect, useState, type KeyboardEvent } from 'react';
 import { searchTitles, type TitleSuggestion } from '../../metadata/titleSearch';
 import type { MediaKind } from '../../providers/types';
 import { ProviderError } from '../../providers/types';
+import { INPUT, LABEL } from './ui';
 
 export const MIN_QUERY_CHARS = 3;
 export const DEBOUNCE_MS = 350;
 
-const INPUT =
-  'w-full rounded-md border border-stone-300 bg-white py-1.5 pr-8 pl-2 text-sm placeholder:text-stone-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700 dark:border-stone-700 dark:bg-stone-950';
-const LABEL = 'mb-1 block text-xs font-medium text-stone-600 dark:text-stone-300';
 const NOTE = 'px-3 py-2.5 text-xs text-stone-500 dark:text-stone-400';
 
 const kindLabel = (kind: MediaKind) => (kind === 'movie' ? 'Movie' : 'TV series');
@@ -120,7 +118,7 @@ export function TitleField({
           // The browser's own autofill list would cover ours.
           autoComplete="off"
           spellCheck={false}
-          className={INPUT}
+          className={`${INPUT} pr-8`}
           value={value}
           maxLength={200}
           placeholder={kind === 'movie' ? 'e.g. Interstellar' : 'e.g. Stranger Things'}
@@ -137,7 +135,7 @@ export function TitleField({
           <button
             type="button"
             aria-label="Clear title"
-            className="absolute inset-y-0 right-0 flex w-8 items-center justify-center rounded-md text-stone-400 hover:text-stone-700 focus-visible:outline-2 focus-visible:outline-rose-700 dark:hover:text-stone-200"
+            className="absolute inset-y-0 right-0 flex w-8 items-center justify-center rounded-md text-stone-500 hover:text-stone-700 dark:text-stone-400 focus-visible:outline-2 focus-visible:outline-rose-700 dark:focus-visible:outline-rose-400 dark:hover:text-stone-200"
             onClick={() => {
               setTyped(null);
               setOpen(false);
@@ -193,7 +191,7 @@ export function TitleField({
               </p>
             )}
           </div>
-          <p className="border-t border-stone-100 px-3 py-1 text-[10px] text-stone-400 dark:border-stone-800">
+          <p className="border-t border-stone-100 px-3 py-1 text-[10px] text-stone-500 dark:text-stone-400 dark:border-stone-800">
             Suggestions from{' '}
             <a href={SOURCES[kind].url} target="_blank" rel="noreferrer" className="underline">
               {SOURCES[kind].name}

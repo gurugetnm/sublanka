@@ -2,11 +2,7 @@ import { LoaderCircle } from 'lucide-react';
 import { useState } from 'react';
 import { loadAccountStatus, saveApiKey, signIn, signOut, type AccountStatus } from '../../providers/opensubtitles';
 import { ProviderError } from '../../providers/types';
-import { Card, SECONDARY_BUTTON } from './ui';
-
-const INPUT =
-  'w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700 dark:border-stone-700 dark:bg-stone-950';
-const HELP = 'text-[11px] leading-relaxed text-stone-500 dark:text-stone-400';
+import { Card, HELP, INPUT, LABEL, SECONDARY_BUTTON } from './ui';
 
 export function ProviderSettings({ account, onChange }: { account: AccountStatus | null; onChange: (account: AccountStatus) => void }) {
   const [apiKey, setApiKey] = useState('');
@@ -45,7 +41,7 @@ export function ProviderSettings({ account, onChange }: { account: AccountStatus
         <>
           {account.hasApiKey ? (
             <div className="mt-3 flex items-center gap-2">
-              <p className="flex-1 text-xs">API key saved on this device.</p>
+              <p className="flex-1 text-xs">API key saved on this device. It is not shown again.</p>
               <button type="button" className={SECONDARY_BUTTON} disabled={busy} onClick={() => act(() => saveApiKey(''))}>
                 Remove key
               </button>
@@ -59,7 +55,7 @@ export function ProviderSettings({ account, onChange }: { account: AccountStatus
               }}
             >
               <label className="min-w-0 flex-1 text-xs font-medium text-stone-600 dark:text-stone-300">
-                API key
+                OpenSubtitles API key
                 <input
                   type="password"
                   autoComplete="off"
@@ -92,24 +88,22 @@ export function ProviderSettings({ account, onChange }: { account: AccountStatus
                 }}
               >
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    aria-label="OpenSubtitles username"
-                    placeholder="Username"
-                    autoComplete="username"
-                    className={INPUT}
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                  />
-                  <input
-                    aria-label="OpenSubtitles password"
-                    placeholder="Password"
-                    type="password"
-                    autoComplete="current-password"
-                    className={INPUT}
-                    value={password}
-                    onChange={(event) => setPassword(event.target.value)}
-                  />
+                  <label>
+                    <span className={LABEL}>Username</span>
+                    <input autoComplete="username" className={INPUT} value={username} onChange={(event) => setUsername(event.target.value)} />
+                  </label>
+                  <label>
+                    <span className={LABEL}>Password</span>
+                    <input
+                      type="password"
+                      autoComplete="current-password"
+                      className={INPUT}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                    />
+                  </label>
                 </div>
+                {!account.hasApiKey && <p className={HELP}>Save an API key first to sign in.</p>}
                 <button
                   type="submit"
                   className={`${SECONDARY_BUTTON} self-start`}
