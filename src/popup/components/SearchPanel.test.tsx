@@ -2,7 +2,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DetectedMedia } from '../../discovery/mediaDetection';
-import type { TitleSuggestion } from '../../metadata/tmdb';
+import type { TitleSuggestion } from '../../metadata/titleSearch';
 import type { MediaKind } from '../../providers/types';
 import { ProviderError, type SearchPage, type SubtitleQuery, type SubtitleResult } from '../../providers/types';
 import type { PlayerState } from '../../shared/messages';
@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   requestDownload: vi.fn(),
   searchTitles: vi.fn<(kind: MediaKind, text: string, signal: AbortSignal) => Promise<TitleSuggestion[]>>(),
 }));
-vi.mock('../../metadata/tmdb', () => ({ searchTitles: mocks.searchTitles, posterUrl: (path: string) => `https://image.tmdb.org/t/p/w92${path}` }));
+vi.mock('../../metadata/titleSearch', () => ({ searchTitles: mocks.searchTitles }));
 vi.mock('../../providers', () => ({
   SINHALA_LANGUAGE: 'si',
   PROVIDERS: { opensubtitles: { id: 'opensubtitles', name: 'OpenSubtitles', search: mocks.search, download: vi.fn() } },
@@ -86,7 +86,7 @@ afterEach(() => {
 
 async function render(overrides: Partial<Parameters<typeof SearchPanel>[0]> = {}) {
   await act(async () => {
-    root.render(<SearchPanel tabId={7} currentTrack={null} account={{ hasApiKey: true, username: null }} tmdbReady={true} {...props} {...overrides} />);
+    root.render(<SearchPanel tabId={7} currentTrack={null} account={{ hasApiKey: true, username: null }} {...props} {...overrides} />);
   });
 }
 
@@ -286,10 +286,19 @@ describe('SearchPanel', () => {
   });
 });
 
-const INTERSTELLAR: TitleSuggestion = { kind: 'movie', tmdbId: 157336, title: 'Interstellar', year: 2014, posterPath: '/poster.jpg' };
-const INTERSTELLAR_DOC: TitleSuggestion = { kind: 'movie', tmdbId: 301959, title: 'Interstellar: Nolan’s Odyssey', year: null, posterPath: null };
-const STRANGER_THINGS: TitleSuggestion = { kind: 'episode', tmdbId: 66732, title: 'Stranger Things', year: 2016, posterPath: '/st.jpg' };
-const STRANGERS: TitleSuggestion = { kind: 'episode', tmdbId: 1000, title: 'Strangers', year: 2018, posterPath: null };
+const movie = (id: string, title: string, year: number | null): TitleSuggestion => ({ kind: 'movie', source: 'wikidata', id, title, year, posterUrl: null, imdbId: null });
+const INTERSTELLAR = movie('Q13417189', 'Interstellar', 2014);
+const INTERSTELLAR_WAR = movie('Q42895876', 'Interstellar War', null);
+const STRANGER_THINGS: TitleSuggestion = {
+  kind: 'episode',
+  source: 'tvmaze',
+  id: '2993',
+  title: 'Stranger Things',
+  year: 2016,
+  posterUrl: 'https://static.tvmaze.com/uploads/images/medium_portrait/st.jpg',
+  imdbId: 4574334,
+};
+const STRANGER: TitleSuggestion = { kind: 'episode', source: 'tvmaze', id: '40404', title: 'Stranger', year: 2017, posterUrl: null, imdbId: null };
 
 describe('SearchPanel title suggestions', () => {
   beforeEach(() => {
@@ -326,33 +335,34 @@ describe('SearchPanel title suggestions', () => {
   });
 
   it('shows movie suggestions and selects one with the mouse, without searching subtitles', async () => {
-    mocks.searchTitles.mockResolvedValue([INTERSTELLAR, INTERSTELLAR_DOC]);
+    mocks.searchTitles.mockResolvedValue([INTERSTELLAR, INTERSTELLAR_WAR]);
     mocks.search.mockResolvedValue(page([]));
     await render();
     await type('search-title', 'interst');
     expect(combobox().getAttribute('autocomplete')).toBe('off');
-    expect(text()).toContain('Searching TMDB…');
+    expect(text()).toContain('Searching Wikidata…');
+    expect(text()).toContain('Suggestions from Wikidata (CC0)');
     await settle();
 
     expect(combobox().getAttribute('aria-expanded')).toBe('true');
-    expect(options().map((option) => option.textContent)).toEqual(['Interstellar2014 · Movie', 'Interstellar: Nolan’s OdysseyYear unknown · Movie']);
-    expect(options()[0]?.querySelector('img')?.getAttribute('src')).toBe('https://image.tmdb.org/t/p/w92/poster.jpg');
-    expect(options()[1]?.querySelector('[data-testid="poster-fallback"]')).not.toBeNull(); // missing poster
+    expect(options().map((option) => option.textContent)).toEqual(['Interstellar2014 · Movie', 'Interstellar WarYear unknown · Movie']);
+    expect(options()[1]?.querySelector('[data-testid="poster-fallback"]')).not.toBeNull(); // no poster
 
     await click(options()[0]);
     expect(combobox().value).toBe('Interstellar');
     expect(input('search-year').value).toBe('2014');
     expect(combobox().getAttribute('aria-expanded')).toBe('false');
-    expect(text()).toContain('Selected movie from TMDB · 2014');
+    expect(text()).toContain('Selected movie from Wikidata · 2014');
     expect(mocks.search).not.toHaveBeenCalled();
     expect(mocks.requestDownload).not.toHaveBeenCalled();
 
     await submit();
-    expect(mocks.search).toHaveBeenCalledWith({ kind: 'movie', title: 'Interstellar', year: 2014, tmdbId: 157336, language: 'si', page: 1 }, expect.any(AbortSignal));
+    // Wikidata gives no IMDb id here, so the movie is searched by its exact title and year.
+    expect(mocks.search).toHaveBeenCalledWith({ kind: 'movie', title: 'Interstellar', year: 2014, language: 'si', page: 1 }, expect.any(AbortSignal));
   });
 
   it('picks a TV series with the keyboard, keeps season and episode, and leaves the first-air year out of the episode search', async () => {
-    mocks.searchTitles.mockResolvedValue([STRANGERS, STRANGER_THINGS]);
+    mocks.searchTitles.mockResolvedValue([STRANGER, STRANGER_THINGS]);
     mocks.search.mockResolvedValue(page([subtitle('1', 'Stranger.Things.S01E03', { kind: 'episode', seriesTitle: 'Stranger Things', season: 1, episode: 3 })]));
     await render();
     await chooseEpisodeMode();
@@ -362,6 +372,8 @@ describe('SearchPanel title suggestions', () => {
     await settle();
     expect(mocks.searchTitles).toHaveBeenCalledWith('episode', 'strang', expect.any(AbortSignal));
     expect(options()[1]?.textContent).toBe('Stranger Things2016 · TV series');
+    expect(options()[1]?.querySelector('img')?.getAttribute('src')).toBe('https://static.tvmaze.com/uploads/images/medium_portrait/st.jpg');
+    expect(text()).toContain('Suggestions from TVmaze (CC BY-SA)');
 
     await key('ArrowDown');
     await key('ArrowDown');
@@ -377,11 +389,11 @@ describe('SearchPanel title suggestions', () => {
 
     await submit();
     expect(mocks.search).toHaveBeenCalledTimes(1);
-    expect(mocks.search.mock.calls[0]?.[0]).toEqual({ kind: 'episode', title: 'Stranger Things', tmdbId: 66732, season: 1, episode: 3, language: 'si', page: 1 });
+    expect(mocks.search.mock.calls[0]?.[0]).toEqual({ kind: 'episode', title: 'Stranger Things', imdbId: 4574334, season: 1, episode: 3, language: 'si', page: 1 });
   });
 
   it('closes on Escape and wraps around with Arrow Up', async () => {
-    mocks.searchTitles.mockResolvedValue([INTERSTELLAR, INTERSTELLAR_DOC]);
+    mocks.searchTitles.mockResolvedValue([INTERSTELLAR, INTERSTELLAR_WAR]);
     await render();
     await type('search-title', 'inter');
     await settle();
@@ -392,24 +404,24 @@ describe('SearchPanel title suggestions', () => {
     expect(combobox().value).toBe('inter');
   });
 
-  it('says when TMDB has no match, and still searches the typed title', async () => {
+  it('says when the source has no match, and still searches the typed title', async () => {
     mocks.searchTitles.mockResolvedValue([]);
     mocks.search.mockResolvedValue(page([]));
     await render();
     await type('search-title', 'zzqx');
     await settle();
-    expect(text()).toContain('No matching titles on TMDB. You can still search with the title as typed.');
+    expect(text()).toContain('No matching titles on Wikidata. You can still search with the title as typed.');
     await submit();
     expect(mocks.search.mock.calls[0]?.[0]).toEqual({ kind: 'movie', title: 'zzqx', language: 'si', page: 1 });
   });
 
-  it('shows TMDB failures such as rate limiting without blocking a manual search', async () => {
-    mocks.searchTitles.mockRejectedValue(new ProviderError('rate-limit', 'TMDB is receiving too many requests.'));
+  it('shows suggestion failures such as rate limiting without blocking a manual search', async () => {
+    mocks.searchTitles.mockRejectedValue(new ProviderError('rate-limit', 'Wikidata is receiving too many requests.'));
     mocks.search.mockResolvedValue(page([]));
     await render();
     await type('search-title', 'Interstellar');
     await settle();
-    expect(text()).toContain('TMDB is receiving too many requests. You can still search with the title as typed.');
+    expect(text()).toContain('Wikidata is receiving too many requests. You can still search with the title as typed.');
     await submit();
     expect(mocks.search).toHaveBeenCalledTimes(1);
   });
@@ -425,22 +437,23 @@ describe('SearchPanel title suggestions', () => {
     await settle();
 
     await act(async () => pending[1]?.resolve([INTERSTELLAR]));
-    await act(async () => pending[0]?.resolve([INTERSTELLAR_DOC]));
+    await act(async () => pending[0]?.resolve([INTERSTELLAR_WAR]));
     expect(options().map((option) => option.textContent)).toEqual(['Interstellar2014 · Movie']);
   });
 
-  it('forgets the TMDB id as soon as the title is edited', async () => {
-    mocks.searchTitles.mockResolvedValue([INTERSTELLAR]);
+  it('forgets the selection as soon as the title is edited', async () => {
+    mocks.searchTitles.mockResolvedValue([STRANGER_THINGS]);
     mocks.search.mockResolvedValue(page([]));
     await render();
-    await type('search-title', 'inter');
+    await chooseEpisodeMode();
+    await type('search-title', 'stranger');
     await settle();
     await click(options()[0]);
-    await type('search-title', 'Interstellar 2');
-    expect(text()).not.toContain('Selected movie from TMDB');
+    await type('search-title', 'Stranger Things 2');
+    expect(text()).not.toContain('Selected tv series');
     await submit();
-    expect(mocks.search.mock.calls[0]?.[0]).not.toHaveProperty('tmdbId');
-    expect(session.searchState).toMatchObject({ form: { title: 'Interstellar 2', selected: null } });
+    expect(mocks.search.mock.calls[0]?.[0]).toEqual({ kind: 'episode', title: 'Stranger Things 2', year: 2016, language: 'si', page: 1 });
+    expect(session.searchState).toMatchObject({ form: { title: 'Stranger Things 2', selected: null } });
   });
 
   it('clears the title, year and selection with the clear button', async () => {
@@ -452,7 +465,7 @@ describe('SearchPanel title suggestions', () => {
     await click(container.querySelector('[aria-label="Clear title"]') ?? undefined);
     expect(combobox().value).toBe('');
     expect(input('search-year').value).toBe('');
-    expect(text()).not.toContain('Selected movie from TMDB');
+    expect(text()).not.toContain('Selected movie');
   });
 
   it('drops a movie selection when switching to TV episode', async () => {
@@ -464,12 +477,12 @@ describe('SearchPanel title suggestions', () => {
     await click(options()[0]);
     await chooseEpisodeMode();
     expect(combobox().getAttribute('aria-expanded')).toBe('false');
-    expect(text()).not.toContain('Selected movie from TMDB');
+    expect(text()).not.toContain('Selected movie');
     await submit();
     expect(mocks.search.mock.calls[0]?.[0]).toEqual({ kind: 'episode', title: 'Interstellar', year: 2014, language: 'si', page: 1 });
   });
 
-  it('falls back to a title search when OpenSubtitles knows nothing under the TMDB id', async () => {
+  it('falls back to a title search when OpenSubtitles knows nothing under the IMDb id', async () => {
     mocks.searchTitles.mockResolvedValue([STRANGER_THINGS]);
     mocks.search.mockResolvedValueOnce(page([])).mockResolvedValueOnce(page([subtitle('1', 'Stranger.Things.S02E01')], { totalPages: 2 }));
     await render();
@@ -481,32 +494,33 @@ describe('SearchPanel title suggestions', () => {
     await type('search-episode', '1');
     await submit();
     expect(mocks.search.mock.calls.map(([query]) => query)).toEqual([
-      { kind: 'episode', title: 'Stranger Things', tmdbId: 66732, season: 2, episode: 1, language: 'si', page: 1 },
-      { kind: 'episode', title: 'Stranger Things', tmdbId: undefined, season: 2, episode: 1, language: 'si', page: 1 },
+      { kind: 'episode', title: 'Stranger Things', imdbId: 4574334, season: 2, episode: 1, language: 'si', page: 1 },
+      { kind: 'episode', title: 'Stranger Things', imdbId: undefined, season: 2, episode: 1, language: 'si', page: 1 },
     ]);
     expect(text()).toContain('Stranger.Things.S02E01');
   });
 
-  it('works without a TMDB key: no lookups, a hint to set one up, and manual search', async () => {
-    mocks.search.mockResolvedValue(page([]));
-    await render({ tmdbReady: false });
-    expect(text()).toContain('Title suggestions are off.');
-    await type('search-title', 'Interstellar');
+  it('suggests titles without any API key or settings', async () => {
+    mocks.searchTitles.mockResolvedValue([INTERSTELLAR]);
+    await render();
+    await type('search-title', 'inter');
     await settle();
-    expect(mocks.searchTitles).not.toHaveBeenCalled();
-    expect(combobox().getAttribute('aria-expanded')).toBe('false');
-    await click(button('Add a TMDB key'));
-    expect(props.onOpenSettings).toHaveBeenCalled();
-    await submit();
-    expect(mocks.search).toHaveBeenCalledTimes(1);
+    expect(options()).toHaveLength(1);
   });
 
   it('drops a saved selection that no longer matches the saved title', async () => {
-    session.searchState = { form: { kind: 'movie', title: 'Edited', year: '2014', season: '', episode: '', selected: INTERSTELLAR }, results: null };
+    session.searchState = { form: { kind: 'episode', title: 'Edited', year: '2016', season: '', episode: '', selected: STRANGER_THINGS }, results: null };
     mocks.search.mockResolvedValue(page([]));
     await render();
-    expect(text()).not.toContain('Selected movie from TMDB');
+    expect(text()).not.toContain('Selected tv series');
     await submit();
-    expect(mocks.search.mock.calls[0]?.[0]).not.toHaveProperty('tmdbId');
+    expect(mocks.search.mock.calls[0]?.[0]).not.toHaveProperty('imdbId');
+  });
+
+  it('drops a saved selection from an older version (TMDB)', async () => {
+    const old = { kind: 'movie', tmdbId: 157336, title: 'Interstellar', year: 2014, posterPath: null };
+    session.searchState = { form: { kind: 'movie', title: 'Interstellar', year: '2014', season: '', episode: '', selected: old }, results: null };
+    await render();
+    expect(text()).not.toContain('Selected movie');
   });
 });

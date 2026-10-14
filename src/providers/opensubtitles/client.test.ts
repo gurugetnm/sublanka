@@ -82,10 +82,10 @@ describe('searchSubtitles', () => {
     expect(page).toMatchObject({ page: 2, totalPages: 3 });
   });
 
-  it('searches by a chosen TMDB id instead of the title and year, never as an IMDb id', () => {
-    expect(String(searchParams({ ...MOVIE, tmdbId: 157336 }))).toBe('languages=si&tmdb_id=157336&type=movie');
-    expect(String(searchParams({ ...EPISODE, year: 2016, tmdbId: 66732 }))).toBe(
-      'episode_number=3&languages=si&parent_tmdb_id=66732&season_number=1&type=episode',
+  it('searches by a chosen IMDb id instead of the title and year', () => {
+    expect(String(searchParams({ ...MOVIE, imdbId: 816692 }))).toBe('imdb_id=816692&languages=si&type=movie');
+    expect(String(searchParams({ ...EPISODE, year: 2016, imdbId: 4574334 }))).toBe(
+      'episode_number=3&languages=si&parent_imdb_id=4574334&season_number=1&type=episode',
     );
   });
 

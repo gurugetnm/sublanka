@@ -100,8 +100,8 @@ async function callApi(config: OpenSubtitlesConfig, path: string, init: RequestI
  */
 export function searchParams(query: SubtitleQuery): URLSearchParams {
   const params: Record<string, string> = { languages: query.language, type: query.kind };
-  // A TMDB id names the exact movie or series, so the title and year are not needed (documented: tmdb_id, parent_tmdb_id).
-  if (query.tmdbId !== undefined) params[query.kind === 'movie' ? 'tmdb_id' : 'parent_tmdb_id'] = String(query.tmdbId);
+  // An IMDb id names the exact movie or series, so the title and year are not needed (documented: imdb_id, parent_imdb_id).
+  if (query.imdbId !== undefined) params[query.kind === 'movie' ? 'imdb_id' : 'parent_imdb_id'] = String(query.imdbId);
   else {
     params.query = query.title.trim().toLowerCase();
     if (query.year) params.year = String(query.year);

@@ -1,6 +1,6 @@
 import { CircleCheck, Film, LoaderCircle, Tv, X } from 'lucide-react';
 import { useEffect, useState, type KeyboardEvent } from 'react';
-import { posterUrl, searchTitles, type TitleSuggestion } from '../../metadata/tmdb';
+import { searchTitles, type TitleSuggestion } from '../../metadata/titleSearch';
 import type { MediaKind } from '../../providers/types';
 import { ProviderError } from '../../providers/types';
 
@@ -13,34 +13,34 @@ const LABEL = 'mb-1 block text-xs font-medium text-stone-600 dark:text-stone-300
 const NOTE = 'px-3 py-2.5 text-xs text-stone-500 dark:text-stone-400';
 
 const kindLabel = (kind: MediaKind) => (kind === 'movie' ? 'Movie' : 'TV series');
+/** Each source's attribution; TVmaze's CC BY-SA licence requires it. */
+const SOURCES = {
+  movie: { name: 'Wikidata', url: 'https://www.wikidata.org/', licence: 'CC0' },
+  episode: { name: 'TVmaze', url: 'https://www.tvmaze.com/', licence: 'CC BY-SA' },
+} as const;
 
 /** The answer for one kind + text; a render only uses the answer for what is typed now, so a late, stale answer is ignored. */
 type Lookup = { key: string; suggestions: TitleSuggestion[] } | { key: string; error: string };
 
 /**
- * Title input with TMDB suggestions (ARIA 1.2 combobox with a listbox popup). Suggestions only fill the form;
- * the user still clicks Search. Typing never depends on TMDB, so a manual search always works.
+ * Title input with suggestions from free public sources (ARIA 1.2 combobox with a listbox popup). Suggestions only fill the form;
+ * the user still clicks Search. Typing never depends on the suggestion source, so a manual search always works.
  * Remount it (key) when the media type changes, so suggestions for the other type are never shown.
  */
 export function TitleField({
   kind,
   value,
   selected,
-  enabled,
   onType,
   onSelect,
   onClear,
-  onOpenSettings,
 }: {
   kind: MediaKind;
   value: string;
   selected: TitleSuggestion | null;
-  /** Whether a TMDB key is saved; null while loading. */
-  enabled: boolean | null;
   onType: (title: string) => void;
   onSelect: (suggestion: TitleSuggestion) => void;
   onClear: () => void;
-  onOpenSettings: () => void;
 }) {
   /** What the user last typed; null until they type, so restored or detected titles do not open suggestions. */
   const [typed, setTyped] = useState<string | null>(null);
@@ -50,7 +50,7 @@ export function TitleField({
 
   const text = typed?.trim() ?? '';
   const key = `${kind}:${text}`;
-  const searchable = enabled === true && selected === null && text.length >= MIN_QUERY_CHARS;
+  const searchable = selected === null && text.length >= MIN_QUERY_CHARS;
 
   // Debounced lookup; a newer keystroke clears the timer and aborts the request in flight.
   useEffect(() => {
@@ -158,7 +158,7 @@ export function TitleField({
           <ul id={listId} role="listbox" aria-label="Title suggestions" className="max-h-64 overflow-y-auto">
             {suggestions.map((suggestion, index) => (
               <li
-                key={suggestion.tmdbId}
+                key={suggestion.id}
                 id={optionId(index)}
                 role="option"
                 aria-selected={index === active}
@@ -180,12 +180,12 @@ export function TitleField({
             {!current && (
               <p className={`flex items-center gap-2 ${NOTE}`}>
                 <LoaderCircle className="size-3.5 animate-spin" aria-hidden="true" />
-                Searching TMDB…
+                Searching {SOURCES[kind].name}…
               </p>
             )}
             {current && 'error' in current && <p className={NOTE}>{current.error} You can still search with the title as typed.</p>}
             {current && 'suggestions' in current && suggestions.length === 0 && (
-              <p className={NOTE}>No matching titles on TMDB. You can still search with the title as typed.</p>
+              <p className={NOTE}>No matching titles on {SOURCES[kind].name}. You can still search with the title as typed.</p>
             )}
             {suggestions.length > 0 && (
               <p className="sr-only">
@@ -195,9 +195,10 @@ export function TitleField({
           </div>
           <p className="border-t border-stone-100 px-3 py-1 text-[10px] text-stone-400 dark:border-stone-800">
             Suggestions from{' '}
-            <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer" className="underline">
-              TMDB
-            </a>
+            <a href={SOURCES[kind].url} target="_blank" rel="noreferrer" className="underline">
+              {SOURCES[kind].name}
+            </a>{' '}
+            ({SOURCES[kind].licence})
           </p>
         </div>
       </div>
@@ -206,17 +207,9 @@ export function TitleField({
         <p className="mt-1 flex items-center gap-1.5 text-xs text-emerald-800 dark:text-emerald-300">
           <CircleCheck className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="min-w-0 truncate">
-            Selected {kindLabel(selected.kind).toLowerCase()} from TMDB{selected.year ? ` · ${selected.year}` : ''}
+            Selected {kindLabel(selected.kind).toLowerCase()} from {SOURCES[selected.kind].name}
+            {selected.year ? ` · ${selected.year}` : ''}
           </span>
-        </p>
-      )}
-      {enabled === false && (
-        <p className="mt-1 text-[11px] text-stone-500 dark:text-stone-400">
-          Title suggestions are off.{' '}
-          <button type="button" className="underline" onClick={onOpenSettings}>
-            Add a TMDB key
-          </button>{' '}
-          to turn them on.
         </p>
       )}
     </div>
@@ -226,9 +219,9 @@ export function TitleField({
 function Poster({ suggestion }: { suggestion: TitleSuggestion }) {
   const [failed, setFailed] = useState(false);
   const Icon = suggestion.kind === 'movie' ? Film : Tv;
-  return suggestion.posterPath && !failed ? (
+  return suggestion.posterUrl && !failed ? (
     <img
-      src={posterUrl(suggestion.posterPath)}
+      src={suggestion.posterUrl}
       alt=""
       loading="lazy"
       referrerPolicy="no-referrer"

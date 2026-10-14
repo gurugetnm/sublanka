@@ -69,7 +69,6 @@ export function SearchPanel({
   tabId,
   currentTrack,
   account,
-  tmdbReady,
   onOpenSettings,
   onTrackLoaded,
 }: {
@@ -77,8 +76,6 @@ export function SearchPanel({
   currentTrack: PlayerState['track'];
   /** null while loading. */
   account: AccountStatus | null;
-  /** Whether a TMDB key is saved for title suggestions; null while loading. */
-  tmdbReady: boolean | null;
   onOpenSettings: () => void;
   onTrackLoaded: (state: PlayerState, warnings: string[]) => void;
 }) {
@@ -163,9 +160,9 @@ export function SearchPanel({
     try {
       let page = await provider.search(query, controller.signal);
       if (searchRef.current !== controller) return;
-      // OpenSubtitles may not know the TMDB id; fall back to the title (without the series' first-air year).
-      if (!previous && query.tmdbId !== undefined && page.results.length === 0) {
-        query = { ...query, tmdbId: undefined };
+      // OpenSubtitles may not know the IMDb id; fall back to the title (without the series' premiere year).
+      if (!previous && query.imdbId !== undefined && page.results.length === 0) {
+        query = { ...query, imdbId: undefined };
         page = await provider.search(query, controller.signal);
         if (searchRef.current !== controller) return;
       }
@@ -280,11 +277,9 @@ export function SearchPanel({
             kind={form.kind}
             value={form.title}
             selected={form.selected}
-            enabled={tmdbReady}
             onType={(title) => updateForm({ title, selected: null })}
             onSelect={(selected) => updateForm({ title: selected.title, year: selected.year?.toString() ?? '', selected })}
             onClear={() => updateForm({ title: '', year: '', selected: null })}
-            onOpenSettings={onOpenSettings}
           />
           <div className={`grid gap-2 ${form.kind === 'episode' ? 'grid-cols-3' : 'grid-cols-2'}`}>
             <NumberField id="search-year" label="Year" optional value={form.year} onChange={(year) => updateForm({ year })} />
@@ -390,15 +385,19 @@ export function SearchPanel({
       </section>
 
       <p className="px-1 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
-        Only the title, year, season and episode above (or the chosen TMDB title id) are sent to{' '}
+        Only the title, year, season and episode above (or the chosen title’s IMDb id) are sent to{' '}
         <a href="https://www.opensubtitles.com/" target="_blank" rel="noreferrer" className="underline">
           OpenSubtitles.com
         </a>
         , which provides the subtitles. Title suggestions send only what you type to{' '}
-        <a href="https://www.themoviedb.org/" target="_blank" rel="noreferrer" className="underline">
-          TMDB
-        </a>
-        .
+        <a href="https://www.wikidata.org/" target="_blank" rel="noreferrer" className="underline">
+          Wikidata
+        </a>{' '}
+        (movies) or{' '}
+        <a href="https://www.tvmaze.com/" target="_blank" rel="noreferrer" className="underline">
+          TVmaze
+        </a>{' '}
+        (TV).
       </p>
     </div>
   );

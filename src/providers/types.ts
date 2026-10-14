@@ -17,8 +17,8 @@ export interface SubtitleQuery {
   year?: number;
   season?: number;
   episode?: number;
-  /** TMDB id of the movie or TV series the user picked from suggestions. Never an IMDb id. */
-  tmdbId?: number;
+  /** Numeric IMDb id of the movie or TV series the user picked from suggestions, when the source listed one. */
+  imdbId?: number;
   /** ISO 639-1 code as the provider lists it; Sinhala is "si". */
   language: string;
   /** 1-based. */
