@@ -6,7 +6,7 @@
 import type { SubtitleSource } from '../shared/messages';
 
 /** Every provider is also a track source the popup can show. */
-export type ProviderId = Exclude<SubtitleSource, 'local'>;
+export type ProviderId = Exclude<SubtitleSource, 'local' | 'translated'>;
 
 export type MediaKind = 'movie' | 'episode';
 

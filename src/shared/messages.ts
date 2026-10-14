@@ -14,7 +14,7 @@ export type SubLankaMessage =
   | { type: 'sublanka:select-video'; videoId: number };
 
 /** Where a loaded track came from. The playback engine treats every source the same. */
-export const SUBTITLE_SOURCES = ['local', 'opensubtitles'] as const;
+export const SUBTITLE_SOURCES = ['local', 'opensubtitles', 'translated'] as const;
 export type SubtitleSource = (typeof SUBTITLE_SOURCES)[number];
 
 /** Asks the content script for movie/episode details from the page's own metadata. Answered with DetectedMedia | null. */

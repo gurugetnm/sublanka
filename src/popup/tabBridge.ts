@@ -1,6 +1,7 @@
 import { CONTENT_SCRIPT_FILE } from '../shared/constants';
 import type { DownloadResponse } from '../background/downloadSubtitle';
 import { isDetectedMedia, type DetectedMedia } from '../discovery/mediaDetection';
+import type { TranslationAction, TranslationRequest, TranslationResponse } from '../translation/translationJob';
 import { DETECT_MEDIA_MESSAGE, isPlayerState, isRecord, type DownloadRequest, type PlayerState, type SubLankaMessage } from '../shared/messages';
 
 export type TabConnection =
@@ -49,4 +50,15 @@ export async function requestDownload(request: Omit<DownloadRequest, 'type'>): P
   if (isRecord(reply) && reply.ok === true && isPlayerState(reply.state)) return reply as DownloadResponse;
   if (isRecord(reply) && reply.ok === false && typeof reply.message === 'string') return { ok: false, message: reply.message };
   return { ok: false, message: 'SubLanka could not start the download. Reload the extension and try again.' };
+}
+
+/** Translation jobs live in the background worker, so they keep running after the popup closes. */
+export async function requestTranslation(action: TranslationAction): Promise<TranslationResponse> {
+  try {
+    const reply: unknown = await chrome.runtime.sendMessage({ type: 'sublanka:translation', ...action } satisfies TranslationRequest);
+    if (isRecord(reply) && typeof reply.ok === 'boolean') return reply as TranslationResponse;
+  } catch {
+    // Worker unavailable, e.g. the extension was just reloaded.
+  }
+  return { ok: false, message: 'SubLanka’s background worker did not respond. Reload the extension and try again.' };
 }

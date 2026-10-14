@@ -9,6 +9,7 @@ describe('isSubLankaMessage', () => {
       { type: 'sublanka:get-state' },
       { type: 'sublanka:remove-track' },
       { type: 'sublanka:load-track', fileName: 'a.srt', cues: [cue], source: 'local' },
+      { type: 'sublanka:load-track', fileName: 'a.si.srt', cues: [cue], source: 'translated' },
       { type: 'sublanka:set-enabled', enabled: false },
       { type: 'sublanka:set-demo', visible: true },
       { type: 'sublanka:select-video', videoId: 3 },

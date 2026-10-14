@@ -2,7 +2,7 @@ import { FileText, LoaderCircle, Search, Upload } from 'lucide-react';
 import { useRef } from 'react';
 import type { PlayerState, SubtitleSource } from '../../shared/messages';
 
-const SOURCE_LABELS: Record<SubtitleSource, string> = { local: 'Local upload', opensubtitles: 'OpenSubtitles' };
+const SOURCE_LABELS: Record<SubtitleSource, string> = { local: 'Local upload', opensubtitles: 'OpenSubtitles', translated: 'Machine translated' };
 import { Card, SECONDARY_BUTTON, Switch } from './ui';
 
 function trackStatus(state: PlayerState): { label: string; className: string } {
