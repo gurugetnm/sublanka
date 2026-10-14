@@ -47,7 +47,7 @@ A Sinhala-first Chrome extension for finding, translating, and displaying synchr
 ### Workflow
 
 1. Open a page with a video and click the SubLanka icon. Open the **Search** tab.
-2. SubLanka checks the page's public metadata for a movie or episode title. If it finds one, it says where it came from (for example _Possible match from the tab title: Stranger Things · S01E03_) and pre-fills an empty form. If not, it says so. It never claims a detection it did not make.
+2. SubLanka checks the page's public metadata, and on Netflix the player's visible title, for a movie or episode. If it finds one, it says how sure it is and where the title came from (for example _Possible match from the tab title: Stranger Things · S01E03_). High and medium confidence guesses pre-fill an empty form; a low-confidence guess is only offered with a **Use** button. If nothing is found, it says so and offers **Check again**. It never claims a detection it did not make, and never picks a title suggestion for you.
 3. Correct the details or type them in: **Movie** or **TV episode**, title, optional year, and season and episode for TV. The language is always Sinhala (`si`).
 4. Click **Search**. While it runs you can **Cancel search**. Results show only fields the provider returned:
    - release name and the movie or episode it belongs to;
@@ -75,20 +75,36 @@ A Sinhala-first Chrome extension for finding, translating, and displaying synchr
 
 Detection reads only metadata the page publishes for everyone, in this order:
 
-1. **JSON-LD structured data**: schema.org `Movie` (name, year) and `TVEpisode` (series, season, episode, episode name), including `@graph` lists.
-2. **Open Graph tags**: `og:title` when `og:type` is `video.movie` or `video.episode`, plus `video:release_date`.
-3. **The tab title**, then **the page's first `<h1>`**.
+1. **JSON-LD structured data**: schema.org `Movie` (name, year) and `TVEpisode` (series, season, episode, episode name), including `@graph` lists. A `TVSeries` (for example a Netflix title page) gives the series name only, and only when no episode is listed.
+2. **Netflix player title** (on `https://www.netflix.com/watch/<id>` only): the player's visible label (`[data-uia="video-title"]`, e.g. _Stranger Things · S1:E3 · Chapter Three_) or the pause overlay (_You're watching…_).
+3. **Open Graph tags**: `og:title` when `og:type` is `video.movie` or `video.episode`, plus `video:release_date`.
+4. **The tab title**, then **the page's first `<h1>`**.
+
+Every detection has a confidence level:
+- **High**: a dedicated source (structured data, Open Graph, Netflix player) names a movie with its year, or a series with season and episode. Shown as _Detected from…_.
+- **Medium**: a dedicated source with partial details (a Netflix movie has no year; a limited series shows only `E3`), or free text with a year or an episode code. Shown as _Possible match from…_.
+- **Low**: a bare free-text title such as a tab title `Arrival`. Shown as _Unsure guess from…_, never pre-filled.
+
+To search by IMDb id, pick the title from the autocomplete; detection itself never selects one.
 
 Free-text titles are parsed as follows:
-- Episode notation is recognised as `S01E03`, `Season 1 Episode 3` or `1x03`. Other numbers are never read as episodes, so `1920x1080`, `4x4` and `Apollo 13` are safe.
+- Episode notation is recognised as `S01E03`, Netflix's `S1:E3`, `Season 1 Episode 3`, `Season 1: Ep. 3` or `1x03`. Other numbers are never read as episodes, so `1920x1080`, `4x4` and `Apollo 13` are safe.
 - A year is read only when bracketed, as in `Interstellar (2014)`, so `Blade Runner 2049` and `1917` keep their titles.
 - The site name (`og:site_name` or the host name) is removed.
 - When structured data and the tab title disagree, structured data wins.
 
-Detection runs only when you open the popup. The result stays in the popup and is never sent anywhere until you click **Search**.
+Detection runs when you open the popup. On a Netflix watch page it also:
+- retries for up to about 4 seconds (8 tries, 500 ms apart), because the title renders late;
+- after the popup has injected the content script once, re-reads the page every 2 seconds and remembers the last title seen for the current URL, so the popup can still answer after the controls hide. A timer is used instead of a MutationObserver, since the player changes its DOM constantly;
+- forgets that title when the URL changes (Netflix's client-side navigation, such as autoplaying the next episode), and drops a pending answer if you navigate during the retries.
+
+The result stays in the page and the popup and is never sent anywhere until you click **Search**. No extra permissions are needed: the existing `activeTab` + `scripting` injection covers Netflix like any other site.
 
 **Limitations**:
-- Many sites expose no title at all. A page whose title only names the site (for example just "Netflix") detects nothing, and you type the title. Netflix detection has not been tested on the live site.
+- Many sites expose no title at all. A page whose title only names the site detects nothing, and you type the title.
+- Netflix's watch page is titled just "Netflix", with no sharing tags, structured data or heading. The only title is the player label, which Netflix shows only while the controls are visible or after a pause. If the controls were hidden the whole time, move the pointer over the video and click **Check again**. The Netflix selectors come from Netflix's current markup and have **not been verified on the live site**; Netflix may change them at any time, and the manual search keeps working when that happens.
+- The Netflix numeric id in the URL is Netflix's own. It is never treated as an IMDb or TMDB id. SubLanka reads no Netflix APIs, network traffic or protected streams.
+- Netflix movie labels carry no year, so movie detections stay at medium confidence. Add the year, or pick the title from the autocomplete, to tell remakes apart.
 - A page about a video that is not a film, such as a YouTube vlog, may produce a "possible match" from its tab title. It is labelled as a guess, and you decide whether to search.
 - IMDb/TMDb identifiers are not read from pages and never invented, so searches are by title.
 
@@ -104,7 +120,7 @@ src/providers/
     ├── index.ts              # credentials storage + the SubtitleProvider implementation
     └── fixtures.ts           # mocked API responses for tests
 src/discovery/
-├── mediaDetection.ts         # page metadata → DetectedMedia
+├── mediaDetection.ts         # page metadata / Netflix player label → DetectedMedia with confidence
 └── subtitleRanking.ts        # match assessment and ordering
 src/background/
 ├── index.ts                  # MV3 service worker: accepts download requests from the popup only
@@ -418,6 +434,7 @@ sublanka/
 │   ├── content/
 │   │   ├── index.ts                 # one-time setup, message + storage listeners
 │   │   ├── playbackController.ts    # track, video binding, sync loop
+│   │   ├── mediaWatcher.ts          # detection retries, Netflix title memory, navigation reset
 │   │   ├── videoCandidates.ts       # video detection and ranking
 │   │   ├── subtitleOverlay.ts       # Shadow DOM overlay, top-layer fullscreen handling
 │   │   └── styles.css               # overlay + appearance styles
@@ -495,8 +512,9 @@ The page also lists a checklist. Opening it straight from disk (`file://`) works
 
 ### Automated tests
 
-`npm test` runs 281 Vitest tests in jsdom. No test makes a real network request: every provider response comes from `src/providers/opensubtitles/fixtures.ts` or inline mocks. They cover:
-- media detection (JSON-LD, Open Graph, tab title, heading, episode notations, bracketed years, false positives, conflicting and missing metadata, Netflix-style pages);
+`npm test` runs 309 Vitest tests in jsdom. No test makes a real network request: every provider response comes from `src/providers/opensubtitles/fixtures.ts` or inline mocks. They cover:
+- media detection (JSON-LD, Open Graph, tab title, heading, episode notations, bracketed years, false positives, conflicting and missing metadata, confidence levels, Netflix watch URLs, player labels, pause overlay, limited series, missing and Netflix-only labels);
+- the media watcher (late-rendered titles, bounded retries, remembering a title after the controls hide, client-side navigation, cancelling on navigation, ordinary pages);
 - the OpenSubtitles client (parameters and headers, search, episodes, pagination, empty results, 401/403/406/410/429/5xx, network errors, malformed JSON, cancellation, host allow-listing, capped download, HTML rejection, redirects, login, token storage, expired sign-in);
 - match ranking (exact movie, wrong year, correct/wrong episode, multiple releases, ambiguous titles, missing identifiers);
 - the download worker (SRT and WebVTT downloads loading through the shared parser, malformed and non-UTF-8 files, quota errors, navigation during download, sender checks);
@@ -565,6 +583,20 @@ No key is needed.
 3. **TV episode**: set Season 1, Episode 3, then type `stranger`. Use **↓** and **Enter** to pick _Stranger Things · 2016 · TV series_ (with a poster). Season and episode stay 1 and 3. Click **Search**; on the popup's Network panel the OpenSubtitles request should carry `parent_imdb_id=4574334`.
 4. Type one more letter after selecting. The _Selected_ line disappears. Try **Esc**, the **×** button, and switching Movie/TV.
 5. Go offline (DevTools → Network → Offline) and type. The dropdown says you are offline, and **Search** still sends the typed title.
+
+### Manual testing of Netflix detection
+
+Needs a Netflix account. Nothing here has been verified on the live site yet.
+
+1. `npm run build`, reload SubLanka, and open an episode at `https://www.netflix.com/watch/<id>`.
+2. Move the pointer over the video so the controls show, then open SubLanka → **Search**. Expect _Detected from the video player title: <Series> · S01E03_, with the form pre-filled.
+3. Let the controls hide, close and reopen the popup. The same title should still appear (remembered for this URL).
+4. Skip to the next episode (or let it autoplay). Reopen the popup: the old episode must **not** appear. Show the controls and the new episode should.
+5. Open a movie. Expect _Possible match from the video player title: <Movie>_ with no year.
+6. Pause for about 10 seconds until _You're watching_ appears, then open the popup: the overlay should be read.
+7. With the controls hidden on a fresh tab, open the popup. Within about 4 seconds it should say nothing was found and offer **Check again**. Hover the video and click it.
+8. If any step finds nothing, inspect the player label in DevTools and compare it with the selectors in `src/discovery/mediaDetection.ts` (`fromNetflixPlayer`).
+9. Check that subtitle loading, sync, timing, appearance, position and fullscreen still work on Netflix as before.
 
 ### Manual testing of translation with a real key
 
