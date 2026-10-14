@@ -20,8 +20,15 @@ const STALE_DOWNLOAD_MS = 2 * 60_000;
 const SOURCE_LABELS: Record<DetectedMedia['source'], string> = {
   'structured-data': 'page structured data',
   'open-graph': 'page sharing tags',
+  player: 'video player title',
   'page-title': 'tab title',
   heading: 'page heading',
+};
+
+const CONFIDENCE_LABELS: Record<DetectedMedia['confidence'], string> = {
+  high: 'Detected from the',
+  medium: 'Possible match from the',
+  low: 'Unsure guess from the',
 };
 
 const INPUT =
@@ -83,6 +90,7 @@ export function SearchPanel({
   const [restored, setRestored] = useState(false);
   /** undefined while the page is being checked. */
   const [detected, setDetected] = useState<DetectedMedia | null | undefined>(undefined);
+  const [detectRun, setDetectRun] = useState(0);
   const [status, setStatus] = useState<SearchStatus>({ phase: 'idle' });
   const [formError, setFormError] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -130,12 +138,13 @@ export function SearchPanel({
       .then((media) => {
         if (!active) return;
         setDetected(media);
-        if (media) setForm((current) => (current.title === '' ? formFromMedia(media) : current));
+        // An ambiguous guess is only offered, never filled in. No detection ever picks a title suggestion for the user.
+        if (media && media.confidence !== 'low') setForm((current) => (current.title === '' ? formFromMedia(media) : current));
       });
     return () => {
       active = false;
     };
-  }, [tabId, restored]);
+  }, [tabId, restored, detectRun]);
 
   function persist(nextForm: SearchForm, nextStatus: SearchStatus) {
     const results = nextStatus.phase === 'done' ? { query: nextStatus.query, page: nextStatus.page } : null;
@@ -246,6 +255,10 @@ export function SearchPanel({
           tabId={tabId}
           detected={detected}
           form={form}
+          onRetry={() => {
+            setDetected(undefined);
+            setDetectRun((run) => run + 1);
+          }}
           onUse={(media) => {
             const next = formFromMedia(media);
             setForm(next);
@@ -438,11 +451,13 @@ function DetectedHint({
   tabId,
   detected,
   form,
+  onRetry,
   onUse,
 }: {
   tabId: number | null;
   detected: DetectedMedia | null | undefined;
   form: SearchForm;
+  onRetry: () => void;
   onUse: (media: DetectedMedia) => void;
 }) {
   if (tabId === null) return <p className="text-xs text-stone-500 dark:text-stone-400">Enter the title of what you are watching.</p>;
@@ -455,13 +470,26 @@ function DetectedHint({
     );
   }
   if (detected === null) {
-    return <p className="text-xs text-stone-500 dark:text-stone-400">No movie or episode details found on this page. Enter the title below.</p>;
+    return (
+      <div className="flex items-start gap-2 text-xs text-stone-500 dark:text-stone-400">
+        <p className="min-w-0 flex-1 leading-relaxed">
+          No movie or episode details found on this page. Enter the title below. Some players, such as Netflix, show the title only while
+          their controls are visible: move the pointer over the video, then check again.
+        </p>
+        <button type="button" className={`${SECONDARY_BUTTON} shrink-0`} onClick={onRetry}>
+          Check again
+        </button>
+      </div>
+    );
   }
   return (
     <div className="flex items-center gap-2 rounded-lg bg-stone-100 px-2.5 py-2 text-xs dark:bg-stone-800">
       <p className="min-w-0 flex-1">
-        <span className="text-stone-500 dark:text-stone-400">Possible match from the {SOURCE_LABELS[detected.source]}: </span>
+        <span className="text-stone-500 dark:text-stone-400">
+          {CONFIDENCE_LABELS[detected.confidence]} {SOURCE_LABELS[detected.source]}:{' '}
+        </span>
         <span className="font-medium break-words">{describeMedia(detected)}</span>
+        {detected.confidence === 'low' && <span className="text-stone-500 dark:text-stone-400"> Check it before searching.</span>}
       </p>
       {!sameForm(form, formFromMedia(detected)) && (
         <button type="button" className={`${SECONDARY_BUTTON} shrink-0`} onClick={() => onUse(detected)}>

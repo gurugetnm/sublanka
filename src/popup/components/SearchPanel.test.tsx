@@ -130,7 +130,7 @@ describe('SearchPanel', () => {
   });
 
   it('pre-fills a detected episode, labelled as a guess, and searches with the user’s correction', async () => {
-    mocks.detectPageMedia.mockResolvedValue({ kind: 'episode', title: 'Stranger Thing', season: 1, episode: 3, source: 'page-title' });
+    mocks.detectPageMedia.mockResolvedValue({ kind: 'episode', title: 'Stranger Thing', season: 1, episode: 3, source: 'page-title', confidence: 'medium' });
     mocks.search.mockResolvedValue(page([]));
     await render();
 
@@ -142,6 +142,37 @@ describe('SearchPanel', () => {
     expect(button('Use')).toBeDefined(); // the guess can be restored
     await submit();
     expect(mocks.search.mock.calls[0]?.[0]).toEqual({ kind: 'episode', title: 'Stranger Things', season: 1, episode: 3, language: 'si', page: 1 });
+  });
+
+  it('offers a low-confidence guess without filling it in or selecting a title', async () => {
+    mocks.detectPageMedia.mockResolvedValue({ kind: 'movie', title: 'Arrival', source: 'page-title', confidence: 'low' });
+    await render();
+
+    expect(text()).toContain('Unsure guess from the tab title: Arrival');
+    expect(text()).toContain('Check it before searching');
+    expect(input('search-title').value).toBe('');
+    await click(button('Use'));
+    expect(input('search-title').value).toBe('Arrival');
+    expect(mocks.searchTitles).not.toHaveBeenCalled(); // no suggestion is picked on the user's behalf
+  });
+
+  it('labels a full Netflix player detection as detected and pre-fills it', async () => {
+    mocks.detectPageMedia.mockResolvedValue({ kind: 'episode', title: 'Stranger Things', season: 1, episode: 3, source: 'player', confidence: 'high' });
+    await render();
+    expect(text()).toContain('Detected from the video player title: Stranger Things · S01E03');
+    expect(input('search-episode').value).toBe('3');
+  });
+
+  it('falls back to manual search and lets the user check the page again', async () => {
+    await render();
+    expect(text()).toContain('move the pointer over the video, then check again');
+    expect(mocks.detectPageMedia).toHaveBeenCalledTimes(1);
+
+    mocks.detectPageMedia.mockResolvedValue({ kind: 'movie', title: 'Extraction 2', source: 'player', confidence: 'medium' });
+    await click(button('Check again'));
+    expect(mocks.detectPageMedia).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('Possible match from the video player title: Extraction 2');
+    expect(input('search-title').value).toBe('Extraction 2');
   });
 
   it('shows the empty state when no Sinhala subtitles exist', async () => {
@@ -249,7 +280,7 @@ describe('SearchPanel', () => {
       results: { query: { kind: 'movie', title: 'Interstellar', year: 2014, language: 'si', page: 1 }, page: page([subtitle('1', 'Saved.Release')], { totalPages: 2 }) },
     };
     session.downloadStatus = { tabId: 7, downloadId: 'file-1', label: 'Saved.Release.srt', phase: 'loading', message: 'Downloading Saved.Release.srt…', remaining: null, startedAt: Date.now() };
-    mocks.detectPageMedia.mockResolvedValue({ kind: 'movie', title: 'Something Else', source: 'page-title' });
+    mocks.detectPageMedia.mockResolvedValue({ kind: 'movie', title: 'Something Else', source: 'page-title', confidence: 'low' });
     await render();
 
     expect(input('search-title').value).toBe('Interstellar'); // detection never overwrites the user's form

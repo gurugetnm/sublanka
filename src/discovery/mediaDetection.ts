@@ -14,8 +14,17 @@ export interface DetectedMedia {
   episode?: number;
   episodeTitle?: string;
   /** Which metadata the guess came from, shown to the user so a guess never passes for a fact. */
-  source: 'structured-data' | 'open-graph' | 'page-title' | 'heading';
+  source: 'structured-data' | 'open-graph' | 'player' | 'page-title' | 'heading';
+  /**
+   * high: a dedicated metadata source names the full identity (movie with year, or series with season and episode).
+   * medium: a dedicated source with partial details, or free text with a year or episode code.
+   * low: an ambiguous free-text title. Never pre-filled; the user has to confirm it.
+   */
+  confidence: Confidence;
 }
+
+export type Confidence = 'high' | 'medium' | 'low';
+type Detection = Omit<DetectedMedia, 'confidence'>;
 
 export interface EpisodeNumbers {
   season: number;
@@ -32,8 +41,9 @@ const BRACKETED_YEAR = /[([](\d{4})[)\]]/;
 const SEPARATOR = /\s+[|–—-]\s+|\s*\|\s*/;
 
 const EPISODE_PATTERNS = [
-  /\bS(\d{1,2})\s?E(\d{1,3})\b/i,
-  /\bSeason\s*(\d{1,2})\W{0,3}\s*Episode\s*(\d{1,3})\b/i,
+  // S01E03, S1 E3 and Netflix's "S1:E3".
+  /\bS(\d{1,2})\s?:?\s?E(\d{1,3})\b/i,
+  /\bSeason\s*(\d{1,2})\W{0,3}\s*Ep(?:isode|\.)?\s*(\d{1,3})\b/i,
   // 1x03: the episode needs two digits so "4x4" or "1920x1080" never match.
   /\b(\d{1,2})x(\d{2,3})\b/,
 ];
@@ -95,7 +105,8 @@ function jsonLdItems(document: Document): Record<string, unknown>[] {
   return items;
 }
 
-function fromStructuredData(document: Document): DetectedMedia | null {
+function fromStructuredData(document: Document): Detection | null {
+  let series: Detection | null = null;
   for (const item of jsonLdItems(document)) {
     if (hasType(item, 'TVEpisode')) {
       const series = textOf(item.partOfSeries);
@@ -116,8 +127,13 @@ function fromStructuredData(document: Document): DetectedMedia | null {
       const title = textOf(item.name);
       if (title) return { kind: 'movie', title, year: parseYear(item.datePublished ?? item.dateCreated), source: 'structured-data' };
     }
+    // A series page (e.g. a Netflix title page) names the show but not the episode, so it only wins when nothing better is listed.
+    if (hasType(item, 'TVSeries') && !series) {
+      const title = textOf(item.name);
+      if (title) series = { kind: 'episode', title, source: 'structured-data' };
+    }
   }
-  return null;
+  return series;
 }
 
 function meta(document: Document, property: string): string {
@@ -128,7 +144,7 @@ function meta(document: Document, property: string): string {
  * Reads a free-text title such as "Stranger Things - S01E03 - Chapter Three | Site" or "Interstellar (2014) - Site".
  * Returns null when nothing usable is left after removing the site name.
  */
-export function parseTitleText(text: string, siteName = ''): Omit<DetectedMedia, 'source'> | null {
+export function parseTitleText(text: string, siteName = ''): Omit<Detection, 'source'> | null {
   const full = clean(text);
   const episode = parseEpisodeNumbers(full);
   const site = siteName.toLowerCase();
@@ -155,6 +171,52 @@ export function parseTitleText(text: string, siteName = ''): Omit<DetectedMedia,
   return title ? { kind: 'movie', title, ...(year ? { year } : {}) } : null;
 }
 
+const NETFLIX_WATCH_URL = /^https:\/\/(?:www\.)?netflix\.com\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?watch\/\d+(?:[/?#]|$)/i;
+/** True for Netflix player pages. The numeric id is Netflix's own and is never used as an IMDb or TMDB id. */
+export const isNetflixWatchPage = (url: string) => NETFLIX_WATCH_URL.test(url);
+
+// Netflix labels limited-series episodes with the episode alone: "E3", "Ep. 3", "Episode 3".
+const LONE_EPISODE = /^(?:E|Ep\.?|Episode)\s*(\d{1,3})$/i;
+const MAX_EPISODE_TITLE_LENGTH = 100;
+
+/**
+ * Netflix's watch page is titled just "Netflix", with no sharing tags, structured data or heading. The only title is
+ * the player's own visible label, which Netflix renders while the controls are showing ("video-title") or after a
+ * pause ("You're watching" overlay). Both are read as plain page text.
+ */
+function fromNetflixPlayer(document: Document): Detection | null {
+  const texts = (root: Element, selector: string) => [...root.querySelectorAll(selector)].map((element) => clean(element.textContent ?? '')).filter(Boolean);
+  const label = document.querySelector('[data-uia="video-title"]');
+  if (label) {
+    // Episodes show "<h4>Series</h4><span>S1:E3</span><span>Episode title</span>"; a heading alone is not proof of a series.
+    const [heading] = texts(label, 'h4');
+    const spans = texts(label, 'span');
+    if (heading) return playerMedia(heading, spans, spans.length > 0);
+    const title = clean(label.textContent ?? '');
+    return title ? playerMedia(title, [], false) : null;
+  }
+  const overlay = document.querySelector('[data-uia="evidence-overlay"]');
+  const [title] = overlay ? texts(overlay, 'h1, h2') : [];
+  return overlay && title ? playerMedia(title, texts(overlay, 'h3, h4, p, span'), false) : null;
+}
+
+function playerMedia(title: string, parts: string[], isSeries: boolean): Detection | null {
+  if (title.toLowerCase() === 'netflix') return null;
+  const markerAt = parts.findIndex((part) => parseEpisodeNumbers(part) || LONE_EPISODE.test(part));
+  if (markerAt === -1) return { kind: isSeries ? 'episode' : 'movie', title, source: 'player' };
+  const marker = parts[markerAt] ?? '';
+  const numbers = parseEpisodeNumbers(marker);
+  const episodeTitle = parts[markerAt + 1];
+  return {
+    kind: 'episode',
+    title,
+    season: numbers?.season,
+    episode: numbers?.episode ?? Number(LONE_EPISODE.exec(marker)?.[1]),
+    ...(episodeTitle && episodeTitle.length <= MAX_EPISODE_TITLE_LENGTH ? { episodeTitle } : {}),
+    source: 'player',
+  };
+}
+
 /** Hostname without "www." and the TLD, e.g. "netflix" for www.netflix.com. Used only to drop the site name from titles. */
 function siteFromHost(hostname: string): string {
   const parts = hostname.replace(/^www\./, '').split('.');
@@ -165,11 +227,16 @@ function siteFromHost(hostname: string): string {
  * Best-effort movie or episode detection. Structured data wins over Open Graph, which wins over
  * the tab title and the main heading. Returns null rather than guessing when the page only names itself.
  */
-export function detectMedia(document: Document): DetectedMedia | null {
+export function detectMedia(document: Document, url = document.location?.href ?? ''): DetectedMedia | null {
   const structured = fromStructuredData(document);
-  if (structured) return withoutUndefined(structured);
+  if (structured) return finish(structured);
 
-  const siteName = meta(document, 'og:site_name') || siteFromHost(document.location?.hostname ?? '');
+  if (isNetflixWatchPage(url)) {
+    const player = fromNetflixPlayer(document);
+    if (player) return finish(player);
+  }
+
+  const siteName = meta(document, 'og:site_name') || siteFromHost(URL.canParse(url) ? new URL(url).hostname : '');
   const ogType = meta(document, 'og:type');
   const ogTitle = meta(document, 'og:title');
   if (ogTitle && (ogType === 'video.movie' || ogType === 'video.episode')) {
@@ -177,25 +244,37 @@ export function detectMedia(document: Document): DetectedMedia | null {
     if (parsed) {
       const year = parsed.year ?? parseYear(meta(document, 'video:release_date'));
       const kind = ogType === 'video.episode' ? 'episode' : parsed.kind;
-      return withoutUndefined({ ...parsed, kind, year, source: 'open-graph' });
+      return finish({ ...parsed, kind, year, source: 'open-graph' });
     }
   }
 
   const fromTitle = parseTitleText(document.title, siteName);
-  if (fromTitle) return withoutUndefined({ ...fromTitle, source: 'page-title' });
+  if (fromTitle) return finish({ ...fromTitle, source: 'page-title' });
 
   const heading = document.querySelector('h1')?.textContent ?? '';
   const fromHeading = parseTitleText(heading, siteName);
-  return fromHeading && withoutUndefined({ ...fromHeading, source: 'heading' });
+  return fromHeading && finish({ ...fromHeading, source: 'heading' });
 }
 
-function withoutUndefined(media: DetectedMedia): DetectedMedia {
-  return Object.fromEntries(Object.entries(media).filter(([, value]) => value !== undefined)) as unknown as DetectedMedia;
+export function confidenceOf(media: Detection): Confidence {
+  const dedicated = media.source !== 'page-title' && media.source !== 'heading';
+  const complete = media.kind === 'movie' ? media.year !== undefined : media.season !== undefined && media.episode !== undefined;
+  return dedicated && complete ? 'high' : dedicated || complete ? 'medium' : 'low';
+}
+
+function finish(media: Detection): DetectedMedia {
+  const withConfidence = { ...media, confidence: confidenceOf(media) };
+  return Object.fromEntries(Object.entries(withConfidence).filter(([, value]) => value !== undefined)) as unknown as DetectedMedia;
 }
 
 /** Shape check for the content script's reply. */
 export function isDetectedMedia(value: unknown): value is DetectedMedia {
   if (typeof value !== 'object' || value === null) return false;
   const media = value as Record<string, unknown>;
-  return (media.kind === 'movie' || media.kind === 'episode') && typeof media.title === 'string' && media.title !== '';
+  return (
+    (media.kind === 'movie' || media.kind === 'episode') &&
+    typeof media.title === 'string' &&
+    media.title !== '' &&
+    (media.confidence === 'high' || media.confidence === 'medium' || media.confidence === 'low')
+  );
 }
