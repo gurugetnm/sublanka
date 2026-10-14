@@ -1,5 +1,7 @@
 import { CONTENT_SCRIPT_FILE } from '../shared/constants';
-import { isPlayerState, type PlayerState, type SubLankaMessage } from '../shared/messages';
+import type { DownloadResponse } from '../background/downloadSubtitle';
+import { isDetectedMedia, type DetectedMedia } from '../discovery/mediaDetection';
+import { DETECT_MEDIA_MESSAGE, isPlayerState, isRecord, type DownloadRequest, type PlayerState, type SubLankaMessage } from '../shared/messages';
 
 export type TabConnection =
   | { kind: 'ready'; tabId: number; state: PlayerState }
@@ -32,4 +34,19 @@ export async function connectToActiveTab(): Promise<TabConnection> {
     // e.g. Chrome Web Store, error pages, or file:// without "Allow access to file URLs".
     return { kind: 'unavailable' };
   }
+}
+
+/** Best-effort movie/episode details from the page's public metadata; null when the page does not say. */
+export async function detectPageMedia(tabId: number): Promise<DetectedMedia | null> {
+  await chrome.scripting.executeScript({ target: { tabId }, files: [CONTENT_SCRIPT_FILE] });
+  const reply: unknown = await chrome.tabs.sendMessage(tabId, DETECT_MEDIA_MESSAGE, { frameId: 0 });
+  return isDetectedMedia(reply) ? reply : null;
+}
+
+/** Hands a download to the background worker, which finishes it even if the popup closes. */
+export async function requestDownload(request: Omit<DownloadRequest, 'type'>): Promise<DownloadResponse> {
+  const reply: unknown = await chrome.runtime.sendMessage({ type: 'sublanka:download-subtitle', ...request } satisfies DownloadRequest);
+  if (isRecord(reply) && reply.ok === true && isPlayerState(reply.state)) return reply as DownloadResponse;
+  if (isRecord(reply) && reply.ok === false && typeof reply.message === 'string') return { ok: false, message: reply.message };
+  return { ok: false, message: 'SubLanka could not start the download. Reload the extension and try again.' };
 }
