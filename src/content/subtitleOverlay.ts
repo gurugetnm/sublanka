@@ -12,10 +12,30 @@ export function isSubtitleVisible(): boolean {
   return findHost() !== null;
 }
 
-/** Only the fullscreen element's subtree is painted in fullscreen, so move the overlay into it. */
+/**
+ * Shows the overlay as a manual popover so it renders in the browser top layer, the only thing
+ * painted over a fullscreen element, including a bare <video> that cannot hold children.
+ * The top layer paints in show order, so re-showing moves the overlay above whatever entered since.
+ * The page's own DOM, video element included, is never touched.
+ */
+function raiseInTopLayer(host: HTMLElement): boolean {
+  if (typeof host.togglePopover !== 'function') return false;
+  try {
+    host.setAttribute('popover', 'manual');
+    host.togglePopover(false);
+    host.togglePopover(true);
+    return true;
+  } catch {
+    host.removeAttribute('popover');
+    return false;
+  }
+}
+
 function placeHost(): void {
   const host = findHost();
-  if (!host) return;
+  if (!host || raiseInTopLayer(host)) return;
+
+  // Fallback without the Popover API: only the fullscreen element's subtree is painted, so move into it.
   const fullscreen = document.fullscreenElement;
   const parent = fullscreen && !NON_CONTAINER_TAGS.has(fullscreen.tagName) ? fullscreen : document.documentElement;
   if (host.parentElement !== parent) parent.append(host);
