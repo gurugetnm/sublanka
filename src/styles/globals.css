@@ -4,6 +4,22 @@
   color-scheme: light dark;
 }
 
+/* Chrome caps popups at 800×600; a fixed height keeps the popup from resizing between tabs, and only <main>'s content scrolls. */
 body {
-  @apply m-0 w-[368px] bg-stone-50 font-sans text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+  @apply m-0 h-[600px] w-[392px] overflow-hidden bg-stone-50 font-sans text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+#root {
+  height: 100%;
 }

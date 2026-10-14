@@ -1,4 +1,4 @@
-import { Card, SECONDARY_BUTTON } from './ui';
+import { Card, HELP, SECONDARY_BUTTON } from './ui';
 
 const STEPS = [-5, -1, -0.5, 0.5, 1, 5];
 
@@ -19,7 +19,7 @@ export function TimingCard({
   const disabled = offset === null;
   return (
     <Card
-      title="Timing"
+      title="Sync offset"
       aside={
         <button type="button" className={SECONDARY_BUTTON} disabled={disabled || offset === 0} onClick={onReset}>
           Reset
@@ -44,7 +44,7 @@ export function TimingCard({
           </button>
         ))}
       </div>
-      <p className="mt-2 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+      <p className={`mt-2 ${HELP}`}>
         Positive values show subtitles later; negative values show them earlier.
       </p>
     </Card>

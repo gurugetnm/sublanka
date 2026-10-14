@@ -1,6 +1,6 @@
 import { LoaderCircle } from 'lucide-react';
 import type { TabConnection } from '../tabBridge';
-import { Card } from './ui';
+import { Card, INPUT, LABEL } from './ui';
 
 interface StatusCopy {
   title: string;
@@ -61,7 +61,7 @@ export function PlayerStatusCard({
   if (connection === null) {
     return (
       <Card title="Player">
-        <p className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
+        <p role="status" className="flex items-center gap-2 text-sm text-stone-600 dark:text-stone-300">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
           Checking this tab…
         </p>
@@ -83,13 +83,13 @@ export function PlayerStatusCard({
       </div>
 
       {state && state.videos.length > 1 && (
-        <label className="mt-2 block text-xs">
-          <span className="sr-only">Video the subtitles follow</span>
+        <label className="mt-3 block">
+          <span className={LABEL}>Subtitles follow</span>
           <select
             value={state.attachedVideoId ?? ''}
             disabled={disabled}
             onChange={(event) => onSelectVideo(Number(event.target.value))}
-            className="w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 text-xs dark:border-stone-700 dark:bg-stone-900"
+            className={`${INPUT} disabled:opacity-50`}
           >
             {state.attachedVideoId === null && (
               <option value="" disabled>

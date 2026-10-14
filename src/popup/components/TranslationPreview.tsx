@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { SubtitleCue } from '../../subtitles/types';
 import { formatTimestamp } from '../../translation/subtitleExport';
-import { SECONDARY_BUTTON } from './ui';
+import { INPUT, SECONDARY_BUTTON } from './ui';
 
-const PAGE_SIZE = 20;
+/** Small pages instead of an inner scroll box, so the popup has a single scroll area. */
+const PAGE_SIZE = 10;
 
-/** English beside Sinhala, 20 cues per page, with a one-cue-at-a-time editor. Text is rendered by React as plain text. */
+/** English beside Sinhala, 10 cues per page, with a one-cue-at-a-time editor. Text is rendered by React as plain text. */
 export function TranslationPreview({
   cues,
   translations,
@@ -18,18 +19,20 @@ export function TranslationPreview({
 }) {
   const [page, setPage] = useState(0);
   const [editing, setEditing] = useState<{ index: number; text: string; error: string | null } | null>(null);
+  const [saving, setSaving] = useState(false);
   const pages = Math.max(1, Math.ceil(cues.length / PAGE_SIZE));
   const start = page * PAGE_SIZE;
 
   async function save() {
-    if (!editing) return;
-    const error = await onEdit(editing.index, editing.text);
+    if (!editing || saving) return;
+    setSaving(true);
+    const error = await onEdit(editing.index, editing.text).finally(() => setSaving(false));
     setEditing(error ? { ...editing, error } : null);
   }
 
   return (
     <div>
-      <ol className="max-h-72 divide-y divide-stone-200 overflow-y-auto rounded-lg border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
+      <ol className="divide-y divide-stone-200 rounded-lg border border-stone-200 dark:divide-stone-800 dark:border-stone-800">
         {cues.slice(start, start + PAGE_SIZE).map((cue, offset) => {
           const index = start + offset;
           const isEditing = editing?.index === index;
@@ -42,7 +45,7 @@ export function TranslationPreview({
                 {!isEditing && (
                   <button
                     type="button"
-                    className="rounded px-1 text-rose-800 hover:underline dark:text-rose-300"
+                    className="rounded px-1 text-rose-800 hover:underline focus-visible:outline-2 focus-visible:outline-rose-700 dark:text-rose-300 dark:focus-visible:outline-rose-400"
                     aria-label={`Edit subtitle ${index + 1}`}
                     onClick={() => setEditing({ index, text: translations[index] ?? '', error: null })}
                   >
@@ -59,9 +62,21 @@ export function TranslationPreview({
                     lang="si"
                     aria-label={`Sinhala text for subtitle ${index + 1}`}
                     rows={Math.max(2, editing.text.split('\n').length)}
-                    className="w-full rounded-md border border-stone-300 bg-white px-2 py-1 text-sm focus-visible:outline-2 focus-visible:outline-rose-700 dark:border-stone-700 dark:bg-stone-950"
+                    // Opened by the user's click on Edit, so moving focus here is expected.
+                    autoFocus
+                    aria-invalid={editing.error !== null}
+                    className={INPUT}
                     value={editing.text}
                     onChange={(event) => setEditing({ ...editing, text: event.target.value, error: null })}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Escape') {
+                        event.preventDefault();
+                        setEditing(null);
+                      } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+                        event.preventDefault();
+                        void save();
+                      }
+                    }}
                   />
                   {editing.error && (
                     <p role="alert" className="text-[11px] text-red-700 dark:text-red-300">
@@ -69,17 +84,18 @@ export function TranslationPreview({
                     </p>
                   )}
                   <div className="mt-1 flex gap-1.5">
-                    <button type="button" className={SECONDARY_BUTTON} onClick={() => void save()}>
-                      Save
+                    <button type="button" className={SECONDARY_BUTTON} disabled={saving} onClick={() => void save()}>
+                      {saving ? 'Saving…' : 'Save'}
                     </button>
                     <button type="button" className={SECONDARY_BUTTON} onClick={() => setEditing(null)}>
                       Cancel
                     </button>
+                    <span className="ml-auto self-center text-[11px] text-stone-500 dark:text-stone-400">Ctrl or ⌘+Enter saves · Esc cancels</span>
                   </div>
                 </div>
               ) : (
                 <p lang="si" className="mt-0.5 text-sm whitespace-pre-line">
-                  {translations[index] ?? <span className="text-stone-400 italic">Not translated yet</span>}
+                  {translations[index] ?? <span className="text-stone-500 italic dark:text-stone-400">Not translated yet</span>}
                 </p>
               )}
             </li>
@@ -88,13 +104,13 @@ export function TranslationPreview({
       </ol>
       {pages > 1 && (
         <div className="mt-1.5 flex items-center justify-between text-[11px] text-stone-500 dark:text-stone-400">
-          <button type="button" className={SECONDARY_BUTTON} disabled={page === 0} onClick={() => setPage(page - 1)}>
+          <button type="button" className={SECONDARY_BUTTON} disabled={page === 0} onClick={() => setPage(page - 1)} aria-label="Previous page of subtitles">
             Previous
           </button>
           <span>
             Page {page + 1} of {pages}
           </span>
-          <button type="button" className={SECONDARY_BUTTON} disabled={page >= pages - 1} onClick={() => setPage(page + 1)}>
+          <button type="button" className={SECONDARY_BUTTON} disabled={page >= pages - 1} onClick={() => setPage(page + 1)} aria-label="Next page of subtitles">
             Next
           </button>
         </div>

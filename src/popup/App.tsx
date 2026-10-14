@@ -1,3 +1,4 @@
+import { Captions, Languages, Search, Settings } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { loadAccountStatus, type AccountStatus } from '../providers/opensubtitles';
 import type { PlayerState, SubLankaMessage } from '../shared/messages';
@@ -9,6 +10,7 @@ import { DeveloperTools } from './components/DeveloperTools';
 import { Header } from './components/Header';
 import { PlayerStatusCard } from './components/PlayerStatusCard';
 import { PositionCard } from './components/PositionCard';
+import { PrivacyInfo } from './components/PrivacyInfo';
 import { ProviderSettings } from './components/ProviderSettings';
 import { SearchPanel } from './components/SearchPanel';
 import { SubtitleTrackCard } from './components/SubtitleTrackCard';
@@ -16,6 +18,7 @@ import { Tabs, type TabItem } from './components/Tabs';
 import { TimingCard } from './components/TimingCard';
 import { TranslatePanel } from './components/TranslatePanel';
 import { TranslationSettings } from './components/TranslationSettings';
+import { ErrorBox, SECONDARY_BUTTON } from './components/ui';
 import { loadTranslationKeyStatus } from '../translation/googleTranslate';
 import { connectToActiveTab, sendToTab, type TabConnection } from './tabBridge';
 
@@ -23,10 +26,10 @@ const PAGE_ERROR = 'Could not reach the page. Reload it and try again.';
 
 type Section = 'subtitles' | 'search' | 'translate' | 'settings';
 const SECTIONS: TabItem<Section>[] = [
-  { id: 'subtitles', label: 'Subtitles' },
-  { id: 'search', label: 'Search' },
-  { id: 'translate', label: 'Translate' },
-  { id: 'settings', label: 'Settings' },
+  { id: 'subtitles', label: 'Subtitles', icon: Captions },
+  { id: 'search', label: 'Search', icon: Search },
+  { id: 'translate', label: 'Translate', icon: Languages },
+  { id: 'settings', label: 'Settings', icon: Settings },
 ];
 const SECTION_KEY = 'sublanka.section';
 
@@ -50,9 +53,12 @@ export function App() {
   const [section, setSection] = useState<Section>(initialSection);
   const [account, setAccount] = useState<AccountStatus | null>(null);
   const [translationReady, setTranslationReady] = useState<boolean | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   function openSection(next: Section) {
     setSection(next);
+    // All panels share one scroll area; a new tab starts at its top, not where the last one was left.
+    scrollRef.current?.scrollTo({ top: 0 });
     try {
       localStorage.setItem(SECTION_KEY, next);
     } catch {
@@ -139,78 +145,93 @@ export function App() {
   }
 
   return (
-    <main className="flex flex-col gap-3 p-4">
-      <Header />
-      <Tabs tabs={SECTIONS} value={section} onChange={openSection} />
-
-      {error && (
-        <p role="alert" className="rounded-md bg-red-50 px-3 py-2 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
-          {error}
-        </p>
-      )}
-
-      {/* Panels stay mounted while hidden, so a running search or typed form survives switching tabs. */}
-      <div {...panel('subtitles')} className="flex flex-col gap-3">
-        <PlayerStatusCard
-          connection={connection}
-          disabled={busy}
-          onSelectVideo={(videoId) => run({ type: 'sublanka:select-video', videoId })}
-        />
-        <SubtitleTrackCard
-          state={state}
-          disabled={!ready || busy}
-          busy={busy}
-          warnings={warnings}
-          onFile={importFile}
-          onRemove={() => {
-            setWarnings([]);
-            void run({ type: 'sublanka:remove-track' });
-          }}
-          onSetEnabled={(enabled) => run({ type: 'sublanka:set-enabled', enabled })}
-          onSearch={() => openSection('search')}
-        />
-        <TimingCard
-          offset={settings?.offset ?? null}
-          onAdjust={(delta) => updateSettings((current) => ({ offset: normalizeOffset(current.offset + delta) }))}
-          onReset={() => updateSettings(() => ({ offset: 0 }))}
-        />
+    <main className="flex h-full flex-col">
+      <div className="flex flex-col gap-3 border-b border-stone-200 px-4 pt-3 pb-3 dark:border-stone-800">
+        <Header version={chrome.runtime.getManifest().version} />
+        <Tabs tabs={SECTIONS} value={section} onChange={openSection} />
       </div>
 
-      <div {...panel('search')}>
-        <SearchPanel
-          tabId={tabId}
-          currentTrack={state?.track ?? null}
-          account={account}
-          onOpenSettings={() => openSection('settings')}
-          onTrackLoaded={onTrackLoaded}
-        />
-      </div>
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-4">
+        {error && (
+          <ErrorBox
+            actions={
+              <>
+                {error === PAGE_ERROR && tabId !== null && (
+                  <button type="button" className={SECONDARY_BUTTON} onClick={() => void chrome.tabs.reload(tabId).then(() => window.close())}>
+                    Reload page
+                  </button>
+                )}
+                <button type="button" className={SECONDARY_BUTTON} onClick={() => setError(null)}>
+                  Dismiss
+                </button>
+              </>
+            }
+          >
+            {error}
+          </ErrorBox>
+        )}
 
-      <div {...panel('translate')}>
-        <TranslatePanel
-          tabId={tabId}
-          currentTrack={state?.track ?? null}
-          configured={translationReady}
-          onOpenSettings={() => openSection('settings')}
-          onTrackLoaded={onTrackLoaded}
-        />
-      </div>
+        {/* Panels stay mounted while hidden, so a running search or typed form survives switching tabs. */}
+        <div {...panel('subtitles')} className="flex flex-col gap-3">
+          <PlayerStatusCard
+            connection={connection}
+            disabled={busy}
+            onSelectVideo={(videoId) => run({ type: 'sublanka:select-video', videoId })}
+          />
+          <SubtitleTrackCard
+            state={state}
+            disabled={!ready || busy}
+            busy={busy}
+            warnings={warnings}
+            onFile={importFile}
+            onRemove={() => {
+              setWarnings([]);
+              void run({ type: 'sublanka:remove-track' });
+            }}
+            onSetEnabled={(enabled) => run({ type: 'sublanka:set-enabled', enabled })}
+            onSearch={() => openSection('search')}
+          />
+          <TimingCard
+            offset={settings?.offset ?? null}
+            onAdjust={(delta) => updateSettings((current) => ({ offset: normalizeOffset(current.offset + delta) }))}
+            onReset={() => updateSettings(() => ({ offset: 0 }))}
+          />
+        </div>
 
-      <div {...panel('settings')} className="flex flex-col gap-3">
-        <PositionCard settings={settings} onChange={(patch) => updateSettings(() => patch)} />
-        <AppearanceSettings settings={settings} onChange={(patch) => updateSettings(() => patch)} />
-        <ProviderSettings account={account} onChange={setAccount} />
-        <TranslationSettings configured={translationReady} onChange={setTranslationReady} />
-        <DeveloperTools
-          demoVisible={state?.demoVisible ?? false}
-          disabled={!ready || busy}
-          onToggleDemo={() => run({ type: 'sublanka:set-demo', visible: !state?.demoVisible })}
-        />
-      </div>
+        <div {...panel('search')}>
+          <SearchPanel
+            tabId={tabId}
+            currentTrack={state?.track ?? null}
+            account={account}
+            onOpenSettings={() => openSection('settings')}
+            onOpenSubtitles={() => openSection('subtitles')}
+            onTrackLoaded={onTrackLoaded}
+          />
+        </div>
 
-      <footer className="border-t border-stone-200 pt-3 text-[11px] text-stone-400 dark:border-stone-800 dark:text-stone-500">
-        SubLanka v{chrome.runtime.getManifest().version}
-      </footer>
+        <div {...panel('translate')}>
+          <TranslatePanel
+            tabId={tabId}
+            currentTrack={state?.track ?? null}
+            configured={translationReady}
+            onOpenSettings={() => openSection('settings')}
+            onTrackLoaded={onTrackLoaded}
+          />
+        </div>
+
+        <div {...panel('settings')} className="flex flex-col gap-3">
+          <AppearanceSettings settings={settings} onChange={(patch) => updateSettings(() => patch)} />
+          <PositionCard settings={settings} onChange={(patch) => updateSettings(() => patch)} />
+          <ProviderSettings account={account} onChange={setAccount} />
+          <TranslationSettings configured={translationReady} onChange={setTranslationReady} />
+          <PrivacyInfo />
+          <DeveloperTools
+            demoVisible={state?.demoVisible ?? false}
+            disabled={!ready || busy}
+            onToggleDemo={() => run({ type: 'sublanka:set-demo', visible: !state?.demoVisible })}
+          />
+        </div>
+      </div>
     </main>
   );
 }

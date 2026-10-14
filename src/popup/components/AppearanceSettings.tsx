@@ -43,7 +43,7 @@ export function SegmentedControl<T extends string>({
         {options.map((option) => (
           <label
             key={option.value}
-            className="cursor-pointer rounded-md px-1 py-1 text-center text-xs text-stone-600 has-checked:bg-white has-checked:font-medium has-checked:text-stone-900 has-checked:shadow-sm has-focus-visible:outline-2 has-focus-visible:outline-rose-700 dark:text-stone-300 dark:has-checked:bg-stone-950 dark:has-checked:text-stone-50"
+            className="cursor-pointer rounded-md px-1 py-1 text-center text-xs text-stone-600 has-checked:bg-white has-checked:font-medium has-checked:text-stone-900 has-checked:shadow-sm has-focus-visible:outline-2 has-focus-visible:outline-rose-700 dark:has-focus-visible:outline-rose-400 dark:text-stone-300 dark:has-checked:bg-stone-950 dark:has-checked:text-stone-50"
           >
             <input
               type="radio"
@@ -69,7 +69,7 @@ export function AppearanceSettings({
   onChange: (patch: Partial<SubtitleSettings>) => void;
 }) {
   return (
-    <Card title="Appearance">
+    <Card title="Subtitle appearance">
       {settings === null ? (
         <p className="text-xs text-stone-500">Loading settings…</p>
       ) : (

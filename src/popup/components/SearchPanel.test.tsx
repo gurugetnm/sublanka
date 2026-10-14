@@ -181,7 +181,8 @@ describe('SearchPanel', () => {
     await render();
     await type('search-title', 'Unknown film');
     await submit();
-    expect(text()).toContain('No Sinhala subtitles found. Try another title or release.');
+    expect(text()).toContain('No Sinhala subtitles found');
+    expect(text()).toContain('Check the spelling, remove the year, or try the original title.');
   });
 
   it('shows a loading state and lets the user cancel the search', async () => {
@@ -213,6 +214,21 @@ describe('SearchPanel', () => {
     await submit();
     await click(button('Open settings'));
     expect(props.onOpenSettings).toHaveBeenCalled();
+  });
+
+  it('offers Try again after a failed search, and recovers', async () => {
+    mocks.search.mockRejectedValueOnce(new ProviderError('network', 'Could not reach OpenSubtitles. Check your connection and try again.'));
+    mocks.search.mockResolvedValueOnce(page([subtitle('1', 'Interstellar.2014.BluRay')]));
+    await render();
+    await type('search-title', 'Interstellar');
+    await submit();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Could not reach OpenSubtitles');
+    expect(button('Open settings')).toBeUndefined();
+
+    await click(button('Try again'));
+    expect(mocks.search).toHaveBeenCalledTimes(2);
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(text()).toContain('Interstellar.2014.BluRay');
   });
 
   it('asks for provider setup before searching without an API key', async () => {
@@ -263,6 +279,16 @@ describe('SearchPanel', () => {
 
     await act(async () => finish({ ok: true, state: STATE, warnings: ['Skipped block 4'], remaining: 3 }));
     expect(props.onTrackLoaded).toHaveBeenCalledWith(STATE, ['Skipped block 4']);
+  });
+
+  it('confirms a finished download and links to the sync offset', async () => {
+    const onOpenSubtitles = vi.fn();
+    await render({ onOpenSubtitles });
+    const loaded = { tabId: 7, downloadId: 'file-1', label: 'Film.srt', phase: 'loaded', message: 'Loaded Film.srt from OpenSubtitles.', remaining: 4, startedAt: Date.now() };
+    await act(async () => storageListeners.forEach((listener) => listener({ downloadStatus: { newValue: loaded } }, 'session')));
+    expect([...container.querySelectorAll('[role="status"]')].map((element) => element.textContent)).toContain('Loaded Film.srt from OpenSubtitles.');
+    await click(button('Adjust sync'));
+    expect(onOpenSubtitles).toHaveBeenCalled();
   });
 
   it('shows download failures', async () => {
