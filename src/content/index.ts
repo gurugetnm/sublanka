@@ -1,6 +1,7 @@
-import { detectMedia, type DetectedMedia } from '../discovery/mediaDetection';
+import type { DetectedMedia } from '../discovery/mediaDetection';
 import { DETECT_MEDIA_MESSAGE, isRecord, isSubLankaMessage, type PlayerState } from '../shared/messages';
 import { loadSettings, parseSettings, SETTINGS_STORAGE_KEY } from '../shared/settings';
+import { createMediaWatcher } from './mediaWatcher';
 import { PlaybackController } from './playbackController';
 
 declare global {
@@ -13,6 +14,7 @@ declare global {
 if (!window.__sublankaContentScript) {
   window.__sublankaContentScript = true;
   const controller = new PlaybackController();
+  const mediaWatcher = createMediaWatcher(document, () => location.href);
 
   loadSettings().then(
     (settings) => controller.applySettings(settings),
@@ -26,8 +28,11 @@ if (!window.__sublankaContentScript) {
   });
 
   chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (reply: PlayerState | DetectedMedia | null) => void) => {
-    // Reads only public page metadata, and only when the user opens the Search tab.
-    if (isRecord(message) && message.type === DETECT_MEDIA_MESSAGE.type) return void sendResponse(detectMedia(document));
+    // Reads only visible page text and public metadata, never Netflix APIs or network traffic. Results stay in the page until the popup asks.
+    if (isRecord(message) && message.type === DETECT_MEDIA_MESSAGE.type) {
+      mediaWatcher.detect().then(sendResponse, () => sendResponse(null));
+      return true; // answered asynchronously
+    }
     if (!isSubLankaMessage(message)) return;
     sendResponse(controller.handle(message));
   });
