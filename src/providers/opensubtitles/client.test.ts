@@ -82,6 +82,13 @@ describe('searchSubtitles', () => {
     expect(page).toMatchObject({ page: 2, totalPages: 3 });
   });
 
+  it('searches by a chosen TMDB id instead of the title and year, never as an IMDb id', () => {
+    expect(String(searchParams({ ...MOVIE, tmdbId: 157336 }))).toBe('languages=si&tmdb_id=157336&type=movie');
+    expect(String(searchParams({ ...EPISODE, year: 2016, tmdbId: 66732 }))).toBe(
+      'episode_number=3&languages=si&parent_tmdb_id=66732&season_number=1&type=episode',
+    );
+  });
+
   it('returns an empty list when nothing is found', async () => {
     fetchMock.mockResolvedValue(json(searchResponse([])));
     await expect(searchSubtitles(CONFIG, MOVIE, signal())).resolves.toEqual({ results: [], page: 1, totalPages: 1, totalCount: 0 });

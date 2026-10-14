@@ -99,13 +99,14 @@ async function callApi(config: OpenSubtitlesConfig, path: string, init: RequestI
  * left out too: the API answers page=1 with a 301 to the same URL without it, which costs an extra request.
  */
 export function searchParams(query: SubtitleQuery): URLSearchParams {
-  const params: Record<string, string> = {
-    languages: query.language,
-    query: query.title.trim().toLowerCase(),
-    type: query.kind,
-  };
+  const params: Record<string, string> = { languages: query.language, type: query.kind };
+  // A TMDB id names the exact movie or series, so the title and year are not needed (documented: tmdb_id, parent_tmdb_id).
+  if (query.tmdbId !== undefined) params[query.kind === 'movie' ? 'tmdb_id' : 'parent_tmdb_id'] = String(query.tmdbId);
+  else {
+    params.query = query.title.trim().toLowerCase();
+    if (query.year) params.year = String(query.year);
+  }
   if (query.page > 1) params.page = String(query.page);
-  if (query.year) params.year = String(query.year);
   if (query.kind === 'episode' && query.season !== undefined) params.season_number = String(query.season);
   if (query.kind === 'episode' && query.episode !== undefined) params.episode_number = String(query.episode);
   return new URLSearchParams(Object.entries(params).sort(([a], [b]) => a.localeCompare(b)));
