@@ -1,9 +1,9 @@
-import { FileText, LoaderCircle, Search, Upload } from 'lucide-react';
+import { FileText, Search } from 'lucide-react';
 import { useRef } from 'react';
 import type { PlayerState, SubtitleSource } from '../../shared/messages';
+import { Card, FileInput, FilePicker, HELP, SECONDARY_BUTTON, Switch } from './ui';
 
 const SOURCE_LABELS: Record<SubtitleSource, string> = { local: 'Local upload', opensubtitles: 'OpenSubtitles', translated: 'Machine translated' };
-import { Card, SECONDARY_BUTTON, Switch } from './ui';
 
 function trackStatus(state: PlayerState): { label: string; className: string } {
   if (!state.subtitlesEnabled) return { label: 'Off', className: 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300' };
@@ -41,23 +41,11 @@ export function SubtitleTrackCard({
       title="Subtitles"
       aside={status && <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${status.className}`}>{status.label}</span>}
     >
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".srt,.vtt"
-        className="hidden"
-        tabIndex={-1}
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          event.target.value = ''; // allow choosing the same file again
-          if (file) onFile(file);
-        }}
-      />
-
       {state && track ? (
         <>
+          <FileInput inputRef={inputRef} onFile={onFile} />
           <div className="flex items-center gap-2.5">
-            <FileText className="size-4 shrink-0 text-stone-400" aria-hidden="true" />
+            <FileText className="size-4 shrink-0 text-stone-500 dark:text-stone-400" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-medium" title={track.fileName}>
                 {track.fileName}
@@ -79,27 +67,23 @@ export function SubtitleTrackCard({
               >
                 Replace
               </button>
-              <button type="button" className={SECONDARY_BUTTON} disabled={disabled} onClick={onRemove}>
+              <button type="button" className={SECONDARY_BUTTON} disabled={disabled} onClick={onRemove} aria-label={`Remove ${track.fileName}`}>
                 Remove
               </button>
             </div>
           </div>
         </>
       ) : (
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={() => inputRef.current?.click()}
-          className="flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-stone-300 px-3 py-4 text-sm hover:bg-stone-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-stone-700 dark:hover:bg-stone-800"
-        >
-          {busy ? (
-            <LoaderCircle className="size-5 animate-spin text-stone-400" aria-hidden="true" />
-          ) : (
-            <Upload className="size-5 text-stone-400" aria-hidden="true" />
-          )}
-          <span className="font-medium">{busy ? 'Loading subtitles…' : 'Choose .srt or .vtt file'}</span>
-          <span className="text-xs text-stone-500 dark:text-stone-400">UTF-8 text, up to 5 MB</span>
-        </button>
+        <>
+          <FilePicker
+            title={busy ? 'Loading subtitles…' : 'Choose or drop a .srt or .vtt file'}
+            detail="UTF-8 text, up to 5 MB"
+            busy={busy}
+            disabled={disabled}
+            onFile={onFile}
+          />
+          {!state && <p className={`mt-1.5 ${HELP}`}>Open a page with a video to load subtitles.</p>}
+        </>
       )}
 
       {!(state && track) && (
@@ -123,7 +107,7 @@ export function SubtitleTrackCard({
         </div>
       )}
 
-      <p className="mt-2 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+      <p className={`mt-2 ${HELP}`}>
         Local files are read on your device and never uploaded. Reloading the page clears the loaded subtitles.
       </p>
     </Card>
