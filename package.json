@@ -1,8 +1,8 @@
 {
   "name": "sublanka",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "Sinhala-first browser extension for discovering, translating, and displaying subtitles.",
+  "description": "Sinhala-first browser extension for finding and displaying Sinhala subtitles.",
   "type": "module",
   "scripts": {
     "dev": "vite build --mode content --watch & vite build --mode development --watch",
