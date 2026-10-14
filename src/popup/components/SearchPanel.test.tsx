@@ -7,6 +7,7 @@ import type { MediaKind } from '../../providers/types';
 import { ProviderError, type SearchPage, type SubtitleQuery, type SubtitleResult } from '../../providers/types';
 import type { PlayerState } from '../../shared/messages';
 import { SearchPanel } from './SearchPanel';
+import { DEBOUNCE_MS } from './TitleField';
 
 const mocks = vi.hoisted(() => ({
   search: vi.fn<(query: SubtitleQuery, signal: AbortSignal) => Promise<SearchPage>>(),
@@ -339,7 +340,7 @@ describe('SearchPanel title suggestions', () => {
     vi.useRealTimers();
   });
 
-  const settle = () => act(async () => void vi.advanceTimersByTime(300));
+  const settle = () => act(async () => void vi.advanceTimersByTime(DEBOUNCE_MS));
   const options = () => [...container.querySelectorAll<HTMLElement>('[role="option"]')];
   const combobox = () => input('search-title');
   async function key(name: string) {
@@ -349,20 +350,21 @@ describe('SearchPanel title suggestions', () => {
     await click(container.querySelector('input[value="episode"]')?.closest('label') ?? undefined);
   }
 
-  it('debounces lookups and waits for at least two characters', async () => {
+  it('debounces lookups by 350 ms and waits for at least three characters', async () => {
     mocks.searchTitles.mockResolvedValue([INTERSTELLAR]);
     await render();
     await type('search-title', 'i');
+    await type('search-title', 'in');
     await settle();
     expect(mocks.searchTitles).not.toHaveBeenCalled();
 
-    await type('search-title', 'in');
     await type('search-title', 'int');
-    await act(async () => void vi.advanceTimersByTime(299));
+    await type('search-title', 'inte');
+    await act(async () => void vi.advanceTimersByTime(349));
     expect(mocks.searchTitles).not.toHaveBeenCalled();
     await act(async () => void vi.advanceTimersByTime(1));
     expect(mocks.searchTitles).toHaveBeenCalledTimes(1);
-    expect(mocks.searchTitles).toHaveBeenCalledWith('movie', 'int', expect.any(AbortSignal));
+    expect(mocks.searchTitles).toHaveBeenCalledWith('movie', 'inte', expect.any(AbortSignal));
   });
 
   it('shows movie suggestions and selects one with the mouse, without searching subtitles', async () => {

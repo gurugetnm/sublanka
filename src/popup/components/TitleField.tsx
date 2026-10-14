@@ -4,8 +4,8 @@ import { searchTitles, type TitleSuggestion } from '../../metadata/titleSearch';
 import type { MediaKind } from '../../providers/types';
 import { ProviderError } from '../../providers/types';
 
-export const MIN_QUERY_CHARS = 2;
-export const DEBOUNCE_MS = 300;
+export const MIN_QUERY_CHARS = 3;
+export const DEBOUNCE_MS = 350;
 
 const INPUT =
   'w-full rounded-md border border-stone-300 bg-white py-1.5 pr-8 pl-2 text-sm placeholder:text-stone-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700 dark:border-stone-700 dark:bg-stone-950';

@@ -197,9 +197,9 @@ No backend, database, API key or new permission is involved. Both APIs answer cr
 
 ### Behaviour
 
-- Suggestions start after 2 characters, about 300 ms after you stop typing. Each new keystroke cancels the pending request (`AbortController`). A late answer for older text is never shown.
+- Suggestions start after 3 characters, 350 ms after you stop typing. Each new keystroke cancels the pending request (`AbortController`). A late answer for older text is never shown.
 - Answers are cached for 5 minutes (50 queries) while the popup is open, which also keeps SubLanka well inside the sources' rate limits.
-- Up to 8 results are shown. Each has the title, the year (_Year unknown_ when the source has none) and _Movie_ or _TV series_, plus a TVmaze poster thumbnail for series. Movies, and series without an image, show an icon. Every response is validated, and malformed items are skipped. Thumbnails are only loaded from `https://static.tvmaze.com`.
+- Up to 6 results are shown. Each has the title, the year (_Year unknown_ when the source has none) and _Movie_ or _TV series_, plus a TVmaze poster thumbnail for series. Movies, and series without an image, show an icon. Every response is validated, and malformed items are skipped. Thumbnails are only loaded from `https://static.tvmaze.com`.
 - **Movies:** Wikidata returns all kinds of items, so only those whose English description names a film (_"2014 film by Christopher Nolan"_) are kept. Film series, franchises and characters are dropped. The year is the leading year of that description; if there is none, it is left blank and never guessed.
 - Mouse: click a suggestion. Keyboard: **↓**/**↑** move through the list (wrapping around), **Enter** picks, **Esc** closes. The field is an ARIA 1.2 combobox with a listbox. Browser autofill is off (`autocomplete="off"`) so its list does not cover SubLanka's.
 - The **×** button clears the title, the year and the selection.
@@ -520,7 +520,7 @@ The page also lists a checklist. Opening it straight from disk (`file://`) works
 - the download worker (SRT and WebVTT downloads loading through the shared parser, malformed and non-UTF-8 files, quota errors, navigation during download, sender checks);
 - title suggestions, with mocked `fetch` and a mocked `searchTitles`, never a live call:
   - the client: TVmaze and Wikidata request shapes (only the typed title sent, `Api-User-Agent`), caching, 429/5xx, offline and network errors, cancellation, unreadable responses and Wikidata error bodies, malformed/duplicate items, off-site thumbnails, IMDb id parsing, film-only filtering, years never invented, the 8-result limit;
-  - the Search tab: the 300 ms debounce and 2-character minimum, movie and TV suggestions, mouse and keyboard selection (↓ ↑ Enter Esc), year filling, season/episode kept, no first-air year in episode searches, empty results, rate-limit errors with manual search still working, cancelled and out-of-order lookups, editing/clearing/switching type dropping the selection, missing-poster fallback, no key needed, the `parent_imdb_id` OpenSubtitles query and its title fallback, discarding stale and old TMDB-era saved selections;
+  - the Search tab: the 350 ms debounce and 3-character minimum, movie and TV suggestions, mouse and keyboard selection (↓ ↑ Enter Esc), year filling, season/episode kept, no first-air year in episode searches, empty results, rate-limit errors with manual search still working, cancelled and out-of-order lookups, editing/clearing/switching type dropping the selection, missing-poster fallback, no key needed, the `parent_imdb_id` OpenSubtitles query and its title fallback, discarding stale and old TMDB-era saved selections;
 - the Search tab UI (manual search, detected-title correction, loading, cancel, empty, errors, setup required, validation, stale responses, loading a result, failures, restoring state after reopening, pagination);
 - SRT and VTT parsing (fixtures, BOM, mixed line endings, invalid timestamps, malformed and empty files, overlaps, a 5000-cue file);
 - the cue search, checked against a naive scan on 10 000 cues;

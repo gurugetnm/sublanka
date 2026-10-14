@@ -26,7 +26,7 @@ export interface TitleSuggestion {
   imdbId: number | null;
 }
 
-export const MAX_SUGGESTIONS = 8;
+export const MAX_SUGGESTIONS = 6;
 const REQUEST_TIMEOUT_MS = 10_000;
 const CACHE_TTL_MS = 5 * 60_000;
 const CACHE_SIZE = 50;
