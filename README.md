@@ -24,13 +24,14 @@ A Sinhala-first Chrome extension for finding, translating, and displaying synchr
 - **Fullscreen**: subtitles stay visible when a player container or a bare `<video>` goes fullscreen.
 - **Privacy**:
   - local files are read and parsed in the popup and never uploaded;
-  - the only network requests go to opensubtitles.com, and only when you search or load a result;
-  - those requests send just the title, year, season and episode, never the page URL or contents;
+  - subtitle searches and downloads go to opensubtitles.com, and only when you search or load a result. They send just the title, year, season and episode, or the TMDB id of a title you picked. They never send the page URL or contents;
+  - title suggestions, when a TMDB key is set, send only the text you type in the title field to api.themoviedb.org. Poster thumbnails load from image.tmdb.org;
   - no video is uploaded and no streaming traffic is read;
   - there are no remote scripts, analytics, trackers or ads.
 - **Demo subtitle**: the Milestone 1 fixed sample line, kept under _Developer tools_ for debugging.
 
 - **Sinhala subtitle search** (Milestone 3): search OpenSubtitles.com by title, type (movie or TV episode), optional year, and season/episode. See [Subtitle discovery](#subtitle-discovery).
+- **Title suggestions**: as you type a title, real movies or TV series from TMDB appear with a poster, year and type. Picking one fills the form and searches OpenSubtitles by that exact title. Optional: needs your own TMDB key. See [Title suggestions (TMDB)](#title-suggestions-tmdb).
 - **English → Sinhala translation** (Milestone 4): translate a local English subtitle file, review and edit it, apply it to the video, and export it. See [Translation](#translation).
 - **Popup tabs**: _Subtitles_ (player, loaded track, timing), _Search_, _Translate_ and _Settings_ (position, appearance, subtitle provider, translation, developer tools).
 
@@ -119,7 +120,7 @@ The popup and the worker only use the provider-neutral types; nothing outside `p
 
 | Call | Use |
 | --- | --- |
-| `GET /subtitles` | `languages=si`, `query` (lowercase), `type=movie\|episode`, optional `year`, `season_number`, `episode_number`, `page`. Parameters are sent in alphabetical order, as the docs ask. `page=1` is left out because the API answers it with a 301 redirect (verified live). |
+| `GET /subtitles` | `languages=si`, `query` (lowercase), `type=movie\|episode`, optional `year`, `season_number`, `episode_number`, `page`. When a TMDB suggestion was picked, `tmdb_id` (movie) or `parent_tmdb_id` (series) replaces `query` and `year`. Parameters are sent in alphabetical order, as the docs ask. `page=1` is left out because the API answers it with a 301 redirect (verified live). |
 | `POST /download` | `{ file_id, sub_format: "srt" }` returns a temporary `link`, `file_name` and `remaining`. Each call counts against the download quota. |
 | `GET <link>` | The file itself. No API key or token is sent. |
 | `POST /login` | Optional. `{ username, password }` returns `token` and `base_url`. |
@@ -164,6 +165,44 @@ There are no automatic retries.
 - If the worker is suspended mid-download, the reopened popup shows _The last download was interrupted_ after 2 minutes.
 - **Navigation during download**: the worker records the tab's URL before downloading and checks it again before loading. If the page changed, or the tab closed, nothing is loaded, and the message says why. Chrome also revokes `activeTab` access when a tab navigates.
 - The worker has no timers or polling. It wakes only for a download request from the popup and rejects messages from content scripts or other extensions.
+
+## Title suggestions (TMDB)
+
+The **Search** tab's title field is an autocomplete backed by [TMDB](https://www.themoviedb.org/)'s official search API: [`GET /3/search/movie`](https://developer.themoviedb.org/reference/search-movie) in **Movie** mode and [`GET /3/search/tv`](https://developer.themoviedb.org/reference/search-tv) in **TV episode** mode.
+
+### Behaviour
+
+- Suggestions start after 2 characters, about 300 ms after you stop typing. Each new keystroke cancels the pending request (`AbortController`). A late answer for older text is never shown.
+- Up to 8 results are shown, each with a poster thumbnail (or a film/TV icon when there is none), the title, the year (_Year unknown_ when TMDB has no date) and _Movie_ or _TV series_. `include_adult=false` is sent, and any item TMDB still marks `adult` is dropped. Every response is validated, and malformed items are skipped.
+- Answers are cached for 5 minutes (50 queries) while the popup is open.
+- Mouse: click a suggestion. Keyboard: **↓**/**↑** move through the list (wrapping around), **Enter** picks, **Esc** closes. The field is an ARIA 1.2 combobox with a listbox. Browser autofill is turned off (`autocomplete="off"`) so its list does not cover SubLanka's.
+- The **×** button clears the title, the year and the selection.
+- Loading, _no matching titles_ and errors (invalid key, rate limit (429), offline, TMDB down) appear inside the dropdown. Each one says you can still search with the title as typed.
+
+### What a selection does
+
+- **Movie**: fills the title and the release year, and keeps the TMDB movie id. A line under the field shows _Selected movie from TMDB · 2014_.
+- **TV series**: fills the series name and the first-air year, and keeps the TMDB TV id. **Season and Episode keep their values** and are never guessed. The first-air year is the series' year, not the episode's, so it is **not** sent with an episode search.
+- Nothing is searched or downloaded until you click **Search**, and you still choose the result to load.
+- **No stale ids:** typing in the title, switching Movie/TV episode, clearing, or using a detected title drops the selection. The id is only sent while the field still shows exactly the picked title. A saved form whose selection no longer matches its title is restored without it.
+
+### OpenSubtitles matching
+
+TMDB ids are not IMDb ids, and SubLanka never sends one as the other. OpenSubtitles' `/subtitles` search takes TMDB ids directly: `tmdb_id` for a movie, `parent_tmdb_id` for a series (with `season_number`/`episode_number`). A picked title is searched by its id. If OpenSubtitles returns nothing for that id (its catalogue may not link every title to TMDB), SubLanka searches again once by title, plus the year for movies. **Show more results** continues whichever search produced the list.
+
+### Setup and credentials
+
+1. Create a free account at [themoviedb.org](https://www.themoviedb.org/signup) and request an API key under **Settings → API** ([guide](https://developer.themoviedb.org/docs/getting-started)).
+2. In SubLanka, open **Settings → Title suggestions** and paste either the **API Read Access Token** (sent as `Authorization: Bearer`, TMDB's default method) or the **v3 API key** (32 hex characters, sent as the `api_key` parameter). Both are described in [TMDB's authentication docs](https://developer.themoviedb.org/docs/authentication-application).
+
+- **No key is built into the extension.** The key is stored in `chrome.storage.local` on your device and sent only to `api.themoviedb.org`. Anything bundled in an extension, including build-time `VITE_*` variables, can be read by anyone who installs it.
+- Without a key, the field works as a plain text input and shows _Title suggestions are off. Add a TMDB key to turn them on._ No mock or placeholder suggestions are ever shown.
+- **No new permissions.** TMDB's API answers cross-origin requests from any origin (checked live with a `chrome-extension://` origin), and posters are plain `<img>` loads, so `host_permissions` still lists only `*.opensubtitles.com`.
+- **Public release:** as with OpenSubtitles and Google, asking each user for a key suits development and technical users. A store release with one shared key would need a small proxy that holds the key and forwards only `search/movie` and `search/tv`. That proxy is not built here.
+
+### Attribution and terms
+
+TMDB requires its attribution notice wherever its data is used. **Settings → Title suggestions** shows _"This product uses the TMDB API but is not endorsed or certified by TMDB."_, and the dropdown says _Suggestions from TMDB_ with a link. TMDB's [API terms](https://www.themoviedb.org/api-terms-of-use) allow free non-commercial use with attribution. **Commercial use needs a separate licence from TMDB.** Posters are served by TMDB for display only and are not stored. Review the terms and TMDB's [logo guidelines](https://www.themoviedb.org/about/logos-attribution) before publishing.
 
 ## Translation
 
@@ -376,6 +415,7 @@ sublanka/
 │   ├── translation/                 # provider interface, Google adapter, batch job, SRT/VTT export (Milestone 4)
 │   ├── discovery/                   # media detection, match ranking (Milestone 3)
 │   ├── providers/                   # provider-neutral types + OpenSubtitles adapter (Milestone 3)
+│   ├── metadata/tmdb.ts             # TMDB title search: key storage, validation, cache
 │   ├── content/
 │   │   ├── index.ts                 # one-time setup, message + storage listeners
 │   │   ├── playbackController.ts    # track, video binding, sync loop
@@ -386,7 +426,7 @@ sublanka/
 │   │   ├── App.tsx                  # tabs, state, file import, settings
 │   │   ├── tabBridge.ts             # chrome.tabs / chrome.scripting / worker calls
 │   │   ├── searchState.ts           # search form validation + session persistence
-│   │   └── components/              # tabs, search panel, result cards, provider settings, cards
+│   │   └── components/              # tabs, search panel, title autocomplete (TitleField), result cards, provider/TMDB settings, cards
 │   └── shared/
 │       ├── messages.ts              # message types + runtime validation
 │       ├── settings.ts              # settings model, validation, storage
@@ -456,11 +496,14 @@ The page also lists a checklist. Opening it straight from disk (`file://`) works
 
 ### Automated tests
 
-`npm test` runs 255 Vitest tests in jsdom. No test makes a real network request: every provider response comes from `src/providers/opensubtitles/fixtures.ts` or inline mocks. They cover:
+`npm test` runs 281 Vitest tests in jsdom. No test makes a real network request: every provider response comes from `src/providers/opensubtitles/fixtures.ts` or inline mocks. They cover:
 - media detection (JSON-LD, Open Graph, tab title, heading, episode notations, bracketed years, false positives, conflicting and missing metadata, Netflix-style pages);
 - the OpenSubtitles client (parameters and headers, search, episodes, pagination, empty results, 401/403/406/410/429/5xx, network errors, malformed JSON, cancellation, host allow-listing, capped download, HTML rejection, redirects, login, token storage, expired sign-in);
 - match ranking (exact movie, wrong year, correct/wrong episode, multiple releases, ambiguous titles, missing identifiers);
 - the download worker (SRT and WebVTT downloads loading through the shared parser, malformed and non-UTF-8 files, quota errors, navigation during download, sender checks);
+- TMDB title suggestions, with mocked `fetch` and a mocked `searchTitles`, never a live call:
+  - the client: movie and TV requests, Bearer token vs v3 key, only the typed title sent, caching, missing key (nothing sent), 401/429/5xx, offline and network errors, cancellation, unreadable responses, malformed/adult/duplicate items, missing dates and posters, the 8-result limit;
+  - the Search tab: the 300 ms debounce and 2-character minimum, movie and TV suggestions, mouse and keyboard selection (↓ ↑ Enter Esc), year filling, season/episode kept, no first-air year in episode searches, empty results, rate-limit errors with manual search still working, cancelled and out-of-order lookups, editing/clearing/switching type dropping the TMDB id, missing-poster fallback, no key, the `tmdb_id`/`parent_tmdb_id` OpenSubtitles query and its title fallback, discarding a stale saved selection;
 - the Search tab UI (manual search, detected-title correction, loading, cancel, empty, errors, setup required, validation, stale responses, loading a result, failures, restoring state after reopening, pagination);
 - SRT and VTT parsing (fixtures, BOM, mixed line endings, invalid timestamps, malformed and empty files, overlaps, a 5000-cue file);
 - the cue search, checked against a naive scan on 10 000 cues;
@@ -482,7 +525,7 @@ jsdom has no media playback, Popover API, or fullscreen. Those tests drive fake 
 
 | | Status |
 | --- | --- |
-| Type check, lint, 255 unit tests, production build | Run and passing |
+| Type check, lint, 281 unit tests, production build | Run and passing |
 | Google Translation v2 endpoint, request/response fields, 128 strings per request, 100 KB request cap, `en`/`si` NMT support | From the official docs |
 | Google CORS for `chrome-extension://` origins with `X-Goog-Api-Key`; invalid-key error shape (`400`, `API_KEY_INVALID`) | Checked live with curl and a fake key |
 | **Real English → Sinhala translations** | **Not tested.** No Google Cloud key was available. Whether `format: text` keeps line breaks inside a cue is unverified |
@@ -493,6 +536,9 @@ jsdom has no media playback, Popover API, or fullscreen. Those tests drive fake 
 | Popup layout (Subtitles, Search with results, Settings, dark mode) | Checked in Chrome as a plain page with a stubbed `chrome` API and fixture data |
 | **Real search results, real downloads, login, download quota headers** | **Not tested.** No API key was available |
 | **Loading the extension in Chrome and running the worker end to end** | **Not tested** |
+| TMDB CORS for `chrome-extension://` origins (Bearer header allowed); 401 body for a bad key | Checked live with curl, without a key |
+| OpenSubtitles `tmdb_id` / `parent_tmdb_id` search parameters | From third-party copies of the API docs; the Stoplight page could not be read as text |
+| **Real TMDB suggestions and posters, real id-based OpenSubtitles searches** | **Not tested.** No TMDB key was available |
 
 Response fields were taken from the official docs and cross-checked against Bazarr's long-running OpenSubtitles.com provider. The Stoplight docs could not be read as raw text, so field-level details were confirmed indirectly. The first real-key test should check four things:
 1. `GET /subtitles` returns `data[].attributes.files[].file_id`;
@@ -511,6 +557,15 @@ Response fields were taken from the official docs and cross-checked against Baza
 7. Try a TV search (_Stranger Things_, S1 E3), a title with no Sinhala subtitles, and an invalid key.
 8. On the `service_worker` link in `chrome://extensions`, check the worker's console for errors.
 
+### Manual testing of title suggestions with a real TMDB key
+
+1. `npm run build`, reload SubLanka. **Settings → Title suggestions**: save your TMDB token or key.
+2. **Search**, **Movie**: type `inters`. _Interstellar · 2014 · Movie_ should appear with a poster. Pick it with the mouse; the year becomes 2014 and _Selected movie from TMDB_ appears. Click **Search**.
+3. **TV episode**: set Season 1, Episode 3, then type `strang`. Use **↓** and **Enter** to pick _Stranger Things · 2016 · TV series_. Season and episode stay 1 and 3. Click **Search**.
+4. Type one more letter after selecting. The _Selected_ line disappears. Try **Esc**, the **×** button, and switching Movie/TV.
+5. Go offline (DevTools → Network → Offline) and type. The dropdown says you are offline, and **Search** still sends the typed title.
+6. Remove the key. The field shows _Title suggestions are off_ and makes no TMDB requests.
+
 ### Manual testing of translation with a real key
 
 1. **Settings → Translation**: save a Google Cloud Translation API key.
@@ -525,6 +580,13 @@ Response fields were taken from the official docs and cross-checked against Baza
 
 - **Live provider behaviour is unverified** (see above), for both OpenSubtitles and Google Cloud Translation.
 - **Translation**: machine output that has not been reviewed by a human. Context ends at each cue. Only one job runs at a time. The job and its edits last until the browser closes. Only local English files can be translated. Google bills the user's own project.
+- **Title suggestions:**
+  - They need each user's own TMDB key; no shared-key proxy exists.
+  - TMDB's logo is not shown, only the text notice and link. Add the approved logo before a public release.
+  - Results are English titles (TMDB's default language), so typing a Sinhala title finds nothing.
+  - Only the first page of TMDB results (up to 8 shown) is used.
+  - A TV selection never sets the season or episode.
+  - If OpenSubtitles has no TMDB link for a title, SubLanka falls back to a title search, which matches less precisely.
 - **OpenSubtitles catalogue**: Sinhala coverage is limited. Many titles have no Sinhala subtitles. Sinhala files made for legacy non-Unicode fonts (ASCII text drawn with a special font) would appear as Latin characters; SubLanka does not convert them.
 - **Downloads are always converted to SRT** by the provider. Multi-CD subtitles load part 1 only, and the result says so.
 - **Anonymous downloads** share a small per-IP daily quota. Sign in for more.
