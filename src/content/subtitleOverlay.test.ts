@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OVERLAY_TAG } from '../shared/constants';
-import { hideSubtitle, isSubtitleVisible, showSubtitle } from './subtitleOverlay';
+import { DEFAULT_SETTINGS } from '../shared/settings';
+import { hideSubtitle, isSubtitleVisible, setOverlayAppearance, showSubtitle } from './subtitleOverlay';
 
 const subtitleText = () =>
   document.querySelector(OVERLAY_TAG)?.shadowRoot?.querySelector('.sublanka-subtitle')?.textContent;
@@ -12,6 +13,7 @@ function setFullscreenElement(element: Element | null) {
 
 afterEach(() => {
   hideSubtitle();
+  setOverlayAppearance(DEFAULT_SETTINGS);
   setFullscreenElement(null);
   document.body.innerHTML = '';
 });
@@ -37,6 +39,27 @@ describe('subtitle overlay', () => {
     showSubtitle('two');
     expect(document.querySelectorAll(OVERLAY_TAG)).toHaveLength(1);
     expect(subtitleText()).toBe('two');
+  });
+
+  it('keeps multiline text as separate lines', () => {
+    showSubtitle('පළමු පේළිය\nදෙවන පේළිය');
+    expect(subtitleText()).toBe('පළමු පේළිය\nදෙවන පේළිය');
+  });
+
+  it('applies appearance to the existing overlay without recreating it', () => {
+    showSubtitle('text');
+    const host = document.querySelector<HTMLElement>(OVERLAY_TAG);
+    expect(host?.dataset).toMatchObject({ size: 'medium', position: 'bottom', background: 'translucent', color: 'white' });
+
+    setOverlayAppearance({ fontSize: 'xlarge', position: 'high', background: 'solid', textColor: 'yellow' });
+    expect(document.querySelector(OVERLAY_TAG)).toBe(host);
+    expect(host?.dataset).toMatchObject({ size: 'xlarge', position: 'high', background: 'solid', color: 'yellow' });
+  });
+
+  it('creates new overlays with the latest appearance', () => {
+    setOverlayAppearance({ fontSize: 'small', position: 'raised', background: 'none', textColor: 'yellow' });
+    showSubtitle('text');
+    expect(document.querySelector<HTMLElement>(OVERLAY_TAG)?.dataset).toMatchObject({ size: 'small', position: 'raised', background: 'none', color: 'yellow' });
   });
 
   it('removes the overlay and tolerates repeated hides', () => {
@@ -95,6 +118,7 @@ describe('subtitle overlay in the top layer (Popover API available)', () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     Reflect.deleteProperty(HTMLElement.prototype, 'togglePopover');
   });
 
@@ -146,6 +170,24 @@ describe('subtitle overlay in the top layer (Popover API available)', () => {
     topLayer = [];
     enterFullscreen(document.createElement('video'));
     expect(topLayer.some((el) => el.tagName.toLowerCase() === OVERLAY_TAG)).toBe(false);
+  });
+
+  it('does not re-toggle the popover on every subtitle text change', () => {
+    showSubtitle('one');
+    const toggle = vi.spyOn(HTMLElement.prototype, 'togglePopover');
+    showSubtitle('two');
+    showSubtitle('');
+    expect(toggle).not.toHaveBeenCalled();
+    expect(topLayer).toEqual([overlay()]);
+  });
+
+  it('keeps its place in the top layer when the appearance changes', () => {
+    const video = document.createElement('video');
+    document.body.append(video);
+    showSubtitle('text');
+    enterFullscreen(video);
+    setOverlayAppearance({ ...DEFAULT_SETTINGS, fontSize: 'large' });
+    expect(topLayer.at(-1)).toBe(overlay());
   });
 
   it('falls back to following a fullscreen container if showing the popover fails', () => {

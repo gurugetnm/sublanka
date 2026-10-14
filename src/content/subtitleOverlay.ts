@@ -1,5 +1,10 @@
 import { OVERLAY_TAG } from '../shared/constants';
+import { DEFAULT_SETTINGS, type SubtitleSettings } from '../shared/settings';
 import overlayCss from './styles.css?inline';
+
+export type OverlayAppearance = Pick<SubtitleSettings, 'fontSize' | 'position' | 'background' | 'textColor'>;
+
+let appearance: OverlayAppearance = DEFAULT_SETTINGS;
 
 // Fullscreen elements that cannot render child elements; the overlay stays hidden behind them.
 const NON_CONTAINER_TAGS = new Set(['VIDEO', 'IFRAME', 'CANVAS', 'IMG', 'EMBED', 'OBJECT']);
@@ -41,8 +46,24 @@ function placeHost(): void {
   if (host.parentElement !== parent) parent.append(host);
 }
 
+/** Appearance is a set of data attributes that styles.css matches with :host([...]) selectors. */
+function applyAppearance(host: HTMLElement): void {
+  host.dataset.size = appearance.fontSize;
+  host.dataset.position = appearance.position;
+  host.dataset.background = appearance.background;
+  host.dataset.color = appearance.textColor;
+}
+
+/** Restyles the overlay in place, without recreating it or leaving the top layer. */
+export function setOverlayAppearance(next: OverlayAppearance): void {
+  appearance = next;
+  const host = findHost();
+  if (host) applyAppearance(host);
+}
+
 function createHost(): HTMLElement {
   const host = document.createElement(OVERLAY_TAG);
+  applyAppearance(host);
   const shadow = host.attachShadow({ mode: 'open' });
   const style = document.createElement('style');
   style.textContent = overlayCss;
@@ -54,13 +75,17 @@ function createHost(): HTMLElement {
   return host;
 }
 
-/** Shows `text` as a subtitle line. Repeated calls update the existing overlay instead of adding another. */
+/**
+ * Shows `text` (lines separated by "\n"; "" hides the box but keeps the overlay ready).
+ * Repeated calls only update the text of the one existing overlay.
+ */
 export function showSubtitle(text: string): void {
   const host = findHost() ?? createHost();
   const line = host.shadowRoot?.querySelector('.sublanka-subtitle');
   if (line) line.textContent = text;
+  if (host.isConnected) return;
   document.addEventListener('fullscreenchange', placeHost);
-  if (!host.isConnected) document.documentElement.append(host);
+  document.documentElement.append(host);
   placeHost();
 }
 
