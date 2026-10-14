@@ -1,4 +1,5 @@
-import { isSubLankaMessage, type PlayerState } from '../shared/messages';
+import { detectMedia, type DetectedMedia } from '../discovery/mediaDetection';
+import { DETECT_MEDIA_MESSAGE, isRecord, isSubLankaMessage, type PlayerState } from '../shared/messages';
 import { loadSettings, parseSettings, SETTINGS_STORAGE_KEY } from '../shared/settings';
 import { PlaybackController } from './playbackController';
 
@@ -24,7 +25,9 @@ if (!window.__sublankaContentScript) {
     if (area === 'local' && change) controller.applySettings(parseSettings(change.newValue));
   });
 
-  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (state: PlayerState) => void) => {
+  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (reply: PlayerState | DetectedMedia | null) => void) => {
+    // Reads only public page metadata, and only when the user opens the Search tab.
+    if (isRecord(message) && message.type === DETECT_MEDIA_MESSAGE.type) return void sendResponse(detectMedia(document));
     if (!isSubLankaMessage(message)) return;
     sendResponse(controller.handle(message));
   });
