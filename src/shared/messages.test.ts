@@ -42,6 +42,13 @@ describe('isSubtitleCue', () => {
     expect(isSubtitleCue({ ...cue, endTime: 1 })).toBe(false);
     expect(isSubtitleCue({ ...cue, endTime: Infinity })).toBe(false);
     expect(isSubtitleCue({ ...cue, text: '' })).toBe(false);
+  });
+
+  it('accepts a keypad position 1-9 and rejects anything else', () => {
+    expect(isSubtitleCue({ ...cue, align: 9 })).toBe(true);
+    expect(isSubtitleCue({ ...cue, align: 0 })).toBe(false);
+    expect(isSubtitleCue({ ...cue, align: 2.5 })).toBe(false);
+    expect(isSubtitleCue({ ...cue, align: '9' })).toBe(false);
     expect(isSubtitleCue({ ...cue, index: '0' })).toBe(false);
   });
 });

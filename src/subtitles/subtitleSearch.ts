@@ -1,4 +1,4 @@
-import type { SubtitleCue } from './types';
+import type { SubtitleCue, SubtitleLayout } from './types';
 
 export interface CueIndex {
   cues: readonly SubtitleCue[];
@@ -38,9 +38,18 @@ export function findActiveCues({ cues, maxEndUpTo }: CueIndex, time: number): Su
   return active.sort((a, b) => a.index - b.index);
 }
 
-/** Text to display at `time`: active cues joined by line breaks, or "" during a gap. */
-export function activeText(index: CueIndex, time: number): string {
-  return findActiveCues(index, time)
-    .map((cue) => cue.text)
-    .join('\n');
+/**
+ * Text to display at `time`. Bottom-row cues are joined by line breaks into `main` ("" during a gap);
+ * cues the file places in the top or middle row ({\an4}-{\an9}) are grouped by position, so credits
+ * and watermarks pinned to a corner never stack onto the dialogue. Cues longer than `maxDuration` seconds are skipped.
+ */
+export function activeLayout(index: CueIndex, time: number, maxDuration = Infinity): SubtitleLayout {
+  const main: string[] = [];
+  const placed: SubtitleLayout['placed'] = {};
+  for (const cue of findActiveCues(index, time)) {
+    if (cue.endTime - cue.startTime > maxDuration) continue;
+    if (cue.align === undefined || cue.align <= 3) main.push(cue.text);
+    else placed[cue.align] = placed[cue.align] === undefined ? cue.text : `${placed[cue.align]}\n${cue.text}`;
+  }
+  return { main: main.join('\n'), placed };
 }

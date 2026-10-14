@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_SETTINGS, normalizeOffset, parseSettings } from './settings';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DEFAULT_SETTINGS, loadSettings, normalizeOffset, parseSettings, saveSettings } from './settings';
 
 describe('parseSettings', () => {
   it('returns defaults when nothing is stored', () => {
@@ -8,15 +8,40 @@ describe('parseSettings', () => {
   });
 
   it('restores valid stored settings', () => {
-    const stored = { fontSize: 'xlarge', position: 'high', background: 'solid', textColor: 'yellow', offset: -1.5 };
+    const stored = { fontSize: 'xlarge', position: 'very-high', background: 'solid', textColor: 'yellow', offset: -1.5, hideCredits: false };
     expect(parseSettings(stored)).toEqual(stored);
   });
 
   it('replaces invalid fields individually', () => {
-    expect(parseSettings({ fontSize: 'huge', position: 'raised', offset: Number.NaN, textColor: 3 })).toEqual({
+    expect(parseSettings({ fontSize: 'huge', position: 'low', offset: Number.NaN, textColor: 3 })).toEqual({
       ...DEFAULT_SETTINGS,
-      position: 'raised',
+      position: 'low',
     });
+  });
+
+  it('moves positions from older versions to the new default, except the one that still exists', () => {
+    expect(parseSettings({ position: 'bottom' }).position).toBe('medium');
+    expect(parseSettings({ position: 'raised' }).position).toBe('medium');
+    expect(parseSettings({ position: 'high' }).position).toBe('high');
+  });
+});
+
+describe('settings storage', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('restores a saved position instead of the default', async () => {
+    const area: Record<string, unknown> = {};
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get: async (key: string) => (key in area ? { [key]: area[key] } : {}),
+          set: async (items: Record<string, unknown>) => void Object.assign(area, items),
+        },
+      },
+    });
+    expect((await loadSettings()).position).toBe(DEFAULT_SETTINGS.position);
+    await saveSettings({ ...DEFAULT_SETTINGS, position: 'very-high' });
+    expect((await loadSettings()).position).toBe('very-high');
   });
 });
 

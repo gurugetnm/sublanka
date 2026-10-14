@@ -12,8 +12,12 @@ A Sinhala-first Chrome extension for finding, translating, and displaying synchr
 - **Synchronized playback**: subtitles follow the video's real `currentTime`. This holds through pause, seeking, speed changes, the video ending, a source change, and the page replacing its `<video>` element.
 - **Overlapping cues** are shown together, one per line, in file order.
 - **Timing offset**: −5, −1, −0.5, +0.5, +1 and +5 second steps, plus Reset. It takes effect immediately.
-- **Appearance**: font size (Small, Medium, Large, X-Large), text colour (white, yellow), background (none, translucent, solid), and position (bottom, raised, higher). Changes apply immediately, without restarting playback.
-- **Saved preferences**: appearance and offset are kept in `chrome.storage.local` and survive popup closes and browser restarts.
+- **Video-relative placement**: the subtitle sits on the video's own rendered box, centred over it, wherever the video is (an inline player, a full-window player or fullscreen). Text size scales with the video's width.
+- **Position**: _Very low_, _Low_, _Medium_ (default), _High_ and _Very high_ in the **Position** card. Each step is a share of the video's height (5%, 10%, 15%, 23%, 32%) above its bottom edge. Move subtitles higher when they cover a watermark, a source label or burned-in text. Changes apply immediately.
+- **Hide credits and watermarks** (on by default, in the **Position** card): skips any cue that stays on screen for over a minute. Translator credits and site names are often timed to cover a whole episode; real dialogue never lasts that long. Turn it off to see them.
+- **Pinned cues**: SRT cues tagged with an ASS position such as `{\an9}` (common for translator credits and site names) are drawn where the file puts them. Top-row tags go to the top-left, top or top-right of the video, and middle-row tags to the middle. They no longer stack onto the dialogue at the bottom. Bottom-row tags (`{\an1}`–`{\an3}`) use the normal subtitle position.
+- **Appearance**: font size (Small, Medium, Large, X-Large), text colour (white, yellow) and background (none, translucent, solid). Changes apply immediately, without restarting playback.
+- **Saved preferences**: position, appearance and offset are kept in `chrome.storage.local` and survive popup closes and browser restarts.
 - **Video detection**: finds the HTML5 videos on the page, ignores tiny preview or ad videos, and prefers the one that is playing. If there are several, the popup lets you pick which one the subtitles follow.
 - **Fullscreen**: subtitles stay visible when a player container or a bare `<video>` goes fullscreen.
 - **Local only**: files are read and parsed in the popup and never uploaded. There are no network requests, remote scripts or analytics.
@@ -197,8 +201,13 @@ jsdom has no media playback, Popover API, or fullscreen. Those tests drive fake 
   - Needs the Popover API (Chrome 114+). Without it, a fullscreen bare `<video>` or `<iframe>` hides the subtitle.
   - A dialog or popover the page opens after the subtitle can cover it until the next fullscreen change.
   - Subtitles are not shown in Picture-in-Picture windows.
-- **Positioning** is relative to the viewport, not to the video. On a page with a small inline player, subtitles appear at the bottom of the window. Fullscreen and full-window players are unaffected.
-- **WebVTT layout** (cue `line`/`position`/`align` settings, `::cue` styles, regions) is ignored. All cues are centred at the chosen position.
+- **Positioning:**
+  - Watermarks and burned-in text are not detected. If the subtitle covers them, pick a higher position. One position applies to every site.
+  - The subtitle follows the video's bounding box, including any letterbox bars. It refits when the page scrolls, the window resizes, the video resizes or fullscreen changes. If a page moves the video without any of those (rare), the subtitle catches up at the next one.
+  - If the video is hidden or has no size, the subtitle falls back to the bottom of the window.
+  - A video partly scrolled out of view takes its subtitle with it.
+  - The positions from Milestone 2 _Bottom_ and _Raised_ no longer exist; a saved one becomes _Medium_. A saved _High_ is kept.
+- **WebVTT layout** (cue `line`/`position`/`align` settings, `::cue` styles, regions) is ignored. Of the ASS override tags, only the `{\anN}` position is used; colours, fonts and sizes from `<font>` or `{\...}` tags are dropped. Pinned cues use the same text size as the dialogue. Short credit cues (under a minute, such as an opening "subtitled by" line) are still shown.
 - **File picker in the popup:** on some platforms Chrome closes extension popups when a native dialog takes focus. If that happens, the file is not loaded. This has not been verified on every OS.
 
 ## Roadmap
@@ -206,7 +215,6 @@ jsdom has no media playback, Popover API, or fullscreen. Those tests drive fake 
 - **Milestone 3:**
   - find existing Sinhala subtitles from permitted sources;
   - optionally remember the last file per site, with user consent;
-  - position subtitles relative to the video's own box;
   - support players inside same-origin iframes.
 - **Milestone 4:** English → Sinhala translation of user-supplied subtitle files.
 - Later: per-site compatibility work where technically and legally feasible.

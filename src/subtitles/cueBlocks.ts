@@ -7,6 +7,8 @@ const TIMING_LINE = new RegExp(String.raw`^${TIMESTAMP}\s*-->\s*${TIMESTAMP}(?:\
 
 // WebVTT/SRT markup such as <i>, <c.x>, <v Name>, <00:01.000>, <font ...> and ASS overrides like {\an8}.
 const MARKUP = /<[^>\n]*>|\{\\[^}\n]*\}/g;
+// {\an9}, also inside combined overrides such as {\b1\an9}.
+const ASS_ALIGN = /\{[^}\n]*\\an([1-9])/;
 const ENTITIES: Record<string, string> = {
   amp: '&',
   lt: '<',
@@ -73,12 +75,14 @@ export function parseCueBlock(lines: string[], blockNumber: number, cues: Subtit
     warnings.push(`Block ${blockNumber}: end time is not after start time, skipped.`);
     return;
   }
-  const text = cleanCueText(lines.slice(timingAt + 1));
+  const textLines = lines.slice(timingAt + 1);
+  const text = cleanCueText(textLines);
   if (!text) {
     warnings.push(`Block ${blockNumber}: no subtitle text, skipped.`);
     return;
   }
-  cues.push({ index: cues.length, startTime: timing.start, endTime: timing.end, text });
+  const align = ASS_ALIGN.exec(textLines.join('\n'))?.[1];
+  cues.push({ index: cues.length, startTime: timing.start, endTime: timing.end, text, ...(align && { align: Number(align) }) });
 }
 
 export function finishParsing(cues: SubtitleCue[], warnings: string[]): ParsedSubtitles {

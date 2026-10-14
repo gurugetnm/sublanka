@@ -291,6 +291,49 @@ describe('PlaybackController video selection', () => {
     expect(shownText()).toBe('පළමු පේළිය');
   });
 
+  it('places the overlay on the attached video and moves it with the selection', () => {
+    fakeVideo({ width: 1280, height: 720 });
+    const small = fakeVideo({ width: 480, height: 270 });
+    const state = controller.handle(load());
+    const hostWidth = () => document.querySelector<HTMLElement>(OVERLAY_TAG)?.style.width;
+    expect(hostWidth()).toBe('1280px');
+
+    const smallId = state.videos.find((video) => video.width === 480)?.id ?? -1;
+    controller.handle({ type: 'sublanka:select-video', videoId: smallId });
+    expect(hostWidth()).toBe('480px');
+    small.seek(2);
+    expect(document.querySelectorAll(OVERLAY_TAG)).toHaveLength(1);
+
+    controller.handle({ type: 'sublanka:remove-track' });
+    expect(document.querySelector(OVERLAY_TAG)).toBeNull();
+  });
+
+  it('shows a corner credit apart from the dialogue under it', () => {
+    const player = fakeVideo();
+    const credit: SubtitleCue = { index: 0, startTime: 0, endTime: 18000, text: '#Credit', align: 9 };
+    controller.applySettings({ ...DEFAULT_SETTINGS, hideCredits: false });
+    controller.handle(load([credit, { index: 1, startTime: 1, endTime: 3, text: 'දෙවන' }]));
+    const corner = () => document.querySelector(OVERLAY_TAG)?.shadowRoot?.querySelector('[data-align="9"]')?.textContent;
+    expect(shownText()).toBe('');
+    expect(corner()).toBe('#Credit');
+    player.seek(2);
+    expect(shownText()).toBe('දෙවන');
+    expect(corner()).toBe('#Credit');
+  });
+
+  it('hides credit cues that last over a minute, and shows them again when the setting is off', () => {
+    const player = fakeVideo();
+    const credit: SubtitleCue = { index: 0, startTime: 0, endTime: 18000, text: '#Credit', align: 9 };
+    controller.handle(load([credit, { index: 1, startTime: 1, endTime: 3, text: 'දෙවන' }]));
+    const corner = () => document.querySelector(OVERLAY_TAG)?.shadowRoot?.querySelector('[data-align="9"]')?.textContent ?? '';
+    player.seek(2);
+    expect(shownText()).toBe('දෙවන');
+    expect(corner()).toBe('');
+
+    controller.applySettings({ ...DEFAULT_SETTINGS, hideCredits: false });
+    expect(corner()).toBe('#Credit');
+  });
+
   it('ignores selection of an unknown video', () => {
     fakeVideo();
     const state = controller.handle(load());

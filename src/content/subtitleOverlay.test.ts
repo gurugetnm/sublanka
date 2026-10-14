@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OVERLAY_TAG } from '../shared/constants';
 import { DEFAULT_SETTINGS } from '../shared/settings';
-import { hideSubtitle, isSubtitleVisible, setOverlayAppearance, showSubtitle } from './subtitleOverlay';
+import { hideSubtitle, isSubtitleVisible, setOverlayAppearance, setOverlayVideo, showSubtitle } from './subtitleOverlay';
 
 const subtitleText = () =>
   document.querySelector(OVERLAY_TAG)?.shadowRoot?.querySelector('.sublanka-subtitle')?.textContent;
@@ -11,8 +11,19 @@ function setFullscreenElement(element: Element | null) {
   document.dispatchEvent(new Event('fullscreenchange'));
 }
 
+/** A <video> whose rendered box the test controls; jsdom does no layout. */
+function videoAt(box: { left: number; top: number; width: number; height: number }) {
+  const video = document.createElement('video');
+  video.getBoundingClientRect = () => DOMRect.fromRect({ x: box.left, y: box.top, width: box.width, height: box.height });
+  document.body.append(video);
+  return { video, box };
+}
+
+const hostStyle = () => document.querySelector<HTMLElement>(OVERLAY_TAG)?.style;
+
 afterEach(() => {
   hideSubtitle();
+  setOverlayVideo(null);
   setOverlayAppearance(DEFAULT_SETTINGS);
   setFullscreenElement(null);
   document.body.innerHTML = '';
@@ -49,17 +60,95 @@ describe('subtitle overlay', () => {
   it('applies appearance to the existing overlay without recreating it', () => {
     showSubtitle('text');
     const host = document.querySelector<HTMLElement>(OVERLAY_TAG);
-    expect(host?.dataset).toMatchObject({ size: 'medium', position: 'bottom', background: 'translucent', color: 'white' });
+    expect(host?.dataset).toMatchObject({ size: 'medium', position: 'medium', background: 'translucent', color: 'white' });
 
-    setOverlayAppearance({ fontSize: 'xlarge', position: 'high', background: 'solid', textColor: 'yellow' });
+    setOverlayAppearance({ fontSize: 'xlarge', position: 'very-high', background: 'solid', textColor: 'yellow' });
     expect(document.querySelector(OVERLAY_TAG)).toBe(host);
-    expect(host?.dataset).toMatchObject({ size: 'xlarge', position: 'high', background: 'solid', color: 'yellow' });
+    expect(host?.dataset).toMatchObject({ size: 'xlarge', position: 'very-high', background: 'solid', color: 'yellow' });
   });
 
   it('creates new overlays with the latest appearance', () => {
-    setOverlayAppearance({ fontSize: 'small', position: 'raised', background: 'none', textColor: 'yellow' });
+    setOverlayAppearance({ fontSize: 'small', position: 'low', background: 'none', textColor: 'yellow' });
     showSubtitle('text');
-    expect(document.querySelector<HTMLElement>(OVERLAY_TAG)?.dataset).toMatchObject({ size: 'small', position: 'raised', background: 'none', color: 'yellow' });
+    expect(document.querySelector<HTMLElement>(OVERLAY_TAG)?.dataset).toMatchObject({ size: 'small', position: 'low', background: 'none', color: 'yellow' });
+  });
+
+  it('applies a new vertical position immediately', () => {
+    showSubtitle('text');
+    const host = document.querySelector<HTMLElement>(OVERLAY_TAG);
+    setOverlayAppearance({ ...DEFAULT_SETTINGS, position: 'very-high' });
+    expect(host?.dataset.position).toBe('very-high');
+    setOverlayAppearance({ ...DEFAULT_SETTINGS, position: 'very-low' });
+    expect(host?.dataset.position).toBe('very-low');
+  });
+
+  it("covers the video's rendered box, not the viewport", () => {
+    const { video } = videoAt({ left: 40, top: 120, width: 640, height: 360 });
+    setOverlayVideo(video);
+    showSubtitle('text');
+    expect(hostStyle()).toMatchObject({ left: '40px', top: '120px', width: '640px', height: '360px' });
+  });
+
+  it('follows the video when the page scrolls or resizes', () => {
+    const { video, box } = videoAt({ left: 40, top: 120, width: 640, height: 360 });
+    showSubtitle('text');
+    setOverlayVideo(video);
+
+    box.top = -30;
+    document.dispatchEvent(new Event('scroll'));
+    expect(hostStyle()?.top).toBe('-30px');
+
+    box.width = 960;
+    window.dispatchEvent(new Event('resize'));
+    expect(hostStyle()?.width).toBe('960px');
+  });
+
+  it('covers the viewport without a video, or when the video has no rendered box', () => {
+    const { video } = videoAt({ left: 0, top: 0, width: 0, height: 0 });
+    showSubtitle('text');
+    expect(hostStyle()?.cssText).toBe('');
+    setOverlayVideo(video);
+    expect(hostStyle()?.cssText).toBe('');
+  });
+
+  it('returns to the viewport when the video is released', () => {
+    const { video } = videoAt({ left: 40, top: 120, width: 640, height: 360 });
+    setOverlayVideo(video);
+    showSubtitle('text');
+    setOverlayVideo(null);
+    expect(hostStyle()?.cssText).toBe('');
+  });
+
+  it('a recreated overlay is fitted to the video again', () => {
+    const { video } = videoAt({ left: 40, top: 120, width: 640, height: 360 });
+    setOverlayVideo(video);
+    showSubtitle('text');
+    hideSubtitle();
+    showSubtitle('text');
+    expect(document.querySelectorAll(OVERLAY_TAG)).toHaveLength(1);
+    expect(hostStyle()?.width).toBe('640px');
+  });
+
+  it('removes its scroll, resize and fullscreen listeners when hidden', () => {
+    const removeWindow = vi.spyOn(window, 'removeEventListener');
+    const removeDocument = vi.spyOn(document, 'removeEventListener');
+    showSubtitle('text');
+    hideSubtitle();
+    expect(removeWindow.mock.calls.map(([type]) => type)).toEqual(expect.arrayContaining(['scroll', 'resize']));
+    expect(removeDocument.mock.calls.map(([type]) => type)).toContain('fullscreenchange');
+    vi.restoreAllMocks();
+  });
+
+  it('draws cues pinned with {\\anN} in their own box, apart from the bottom subtitle', () => {
+    showSubtitle('dialogue', { 9: '#Credit\nsite.com | 145' });
+    const shadow = document.querySelector(OVERLAY_TAG)?.shadowRoot;
+    expect(subtitleText()).toBe('dialogue');
+    expect(shadow?.querySelector('[data-align="9"]')?.textContent).toBe('#Credit\nsite.com | 145');
+
+    showSubtitle('next line');
+    expect(shadow?.querySelector('[data-align="9"]')?.textContent).toBe('');
+    expect(subtitleText()).toBe('next line');
+    expect(document.querySelectorAll(OVERLAY_TAG)).toHaveLength(1);
   });
 
   it('removes the overlay and tolerates repeated hides', () => {
@@ -179,6 +268,24 @@ describe('subtitle overlay in the top layer (Popover API available)', () => {
     showSubtitle('');
     expect(toggle).not.toHaveBeenCalled();
     expect(topLayer).toEqual([overlay()]);
+  });
+
+  it('refits to the fullscreen video and stays on top', () => {
+    const { video, box } = videoAt({ left: 40, top: 120, width: 640, height: 360 });
+    setOverlayVideo(video);
+    showSubtitle('text');
+
+    Object.assign(box, { left: 0, top: 0, width: 1920, height: 1080 });
+    enterFullscreen(video);
+    expect(topLayer.at(-1)).toBe(overlay());
+    expect(overlay()?.parentElement).toBe(document.documentElement);
+    expect(hostStyle()).toMatchObject({ left: '0px', top: '0px', width: '1920px', height: '1080px' });
+
+    Object.assign(box, { left: 40, top: 120, width: 640, height: 360 });
+    topLayer = topLayer.filter((el) => el !== video);
+    setFullscreenElement(null);
+    expect(topLayer).toEqual([overlay()]);
+    expect(hostStyle()?.width).toBe('640px');
   });
 
   it('keeps its place in the top layer when the appearance changes', () => {

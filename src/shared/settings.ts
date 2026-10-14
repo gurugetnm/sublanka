@@ -1,5 +1,6 @@
 export const FONT_SIZES = ['small', 'medium', 'large', 'xlarge'] as const;
-export const POSITIONS = ['bottom', 'raised', 'high'] as const;
+/** Height of the subtitle above the video's bottom edge; styles.css maps each to a share of the video height. */
+export const POSITIONS = ['very-low', 'low', 'medium', 'high', 'very-high'] as const;
 export const BACKGROUNDS = ['none', 'translucent', 'solid'] as const;
 export const TEXT_COLORS = ['white', 'yellow'] as const;
 
@@ -10,14 +11,18 @@ export interface SubtitleSettings {
   textColor: (typeof TEXT_COLORS)[number];
   /** Seconds. Positive shows subtitles later, negative earlier: cue time = video.currentTime - offset. */
   offset: number;
+  /** Skip cues on screen longer than a minute: translator credits and site names, never dialogue. */
+  hideCredits: boolean;
 }
 
 export const DEFAULT_SETTINGS: SubtitleSettings = {
   fontSize: 'medium',
-  position: 'bottom',
+  // Clears player control bars and most bottom-edge watermarks while staying in the usual subtitle area.
+  position: 'medium',
   background: 'translucent',
   textColor: 'white',
   offset: 0,
+  hideCredits: true,
 };
 
 export const SETTINGS_STORAGE_KEY = 'subtitleSettings';
@@ -42,6 +47,7 @@ export function parseSettings(value: unknown): SubtitleSettings {
     background: pick(BACKGROUNDS, stored.background, DEFAULT_SETTINGS.background),
     textColor: pick(TEXT_COLORS, stored.textColor, DEFAULT_SETTINGS.textColor),
     offset: typeof stored.offset === 'number' && Number.isFinite(stored.offset) ? normalizeOffset(stored.offset) : 0,
+    hideCredits: typeof stored.hideCredits === 'boolean' ? stored.hideCredits : DEFAULT_SETTINGS.hideCredits,
   };
 }
 

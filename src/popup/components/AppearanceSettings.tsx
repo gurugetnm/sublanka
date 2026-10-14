@@ -1,7 +1,7 @@
 import type { SubtitleSettings } from '../../shared/settings';
 import { Disclosure } from './ui';
 
-interface Option<T extends string> {
+export interface Option<T extends string> {
   value: T;
   label: string;
 }
@@ -11,11 +11,6 @@ const SIZE_OPTIONS: Option<SubtitleSettings['fontSize']>[] = [
   { value: 'medium', label: 'Medium' },
   { value: 'large', label: 'Large' },
   { value: 'xlarge', label: 'X-Large' },
-];
-const POSITION_OPTIONS: Option<SubtitleSettings['position']>[] = [
-  { value: 'bottom', label: 'Bottom' },
-  { value: 'raised', label: 'Raised' },
-  { value: 'high', label: 'Higher' },
 ];
 const BACKGROUND_OPTIONS: Option<SubtitleSettings['background']>[] = [
   { value: 'none', label: 'None' },
@@ -28,7 +23,7 @@ const COLOR_OPTIONS: Option<SubtitleSettings['textColor']>[] = [
 ];
 
 /** Native radio group styled as a segmented control: arrow keys and screen readers work as usual. */
-function SegmentedControl<T extends string>({
+export function SegmentedControl<T extends string>({
   label,
   name,
   value,
@@ -82,7 +77,6 @@ export function AppearanceSettings({
           <SegmentedControl label="Font size" name="fontSize" value={settings.fontSize} options={SIZE_OPTIONS} onChange={(fontSize) => onChange({ fontSize })} />
           <SegmentedControl label="Text colour" name="textColor" value={settings.textColor} options={COLOR_OPTIONS} onChange={(textColor) => onChange({ textColor })} />
           <SegmentedControl label="Background" name="background" value={settings.background} options={BACKGROUND_OPTIONS} onChange={(background) => onChange({ background })} />
-          <SegmentedControl label="Position" name="position" value={settings.position} options={POSITION_OPTIONS} onChange={(position) => onChange({ position })} />
         </div>
       )}
     </Disclosure>

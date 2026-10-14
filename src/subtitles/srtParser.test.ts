@@ -56,6 +56,18 @@ describe('parseSrt', () => {
     expect(cues[0]?.text).toBe('Tom & Jerry <3 alert(1)');
   });
 
+  it('keeps the {\\anN} position of a cue and strips the tag from its text', () => {
+    const { cues } = parseSrt(
+      '1\n00:00:00,000 --> 05:00:04,496\n{\\an9}{\\an9}<font color=#FFFF00><i>#Credit</font>\n{\\an9}◄ site.com  |  145\n\n' +
+        '2\n00:00:01,000 --> 00:00:02,000\n{\\b1\\an8}top\n\n3\n00:00:03,000 --> 00:00:04,000\nplain',
+    );
+    expect(cues.map(({ text, align }) => ({ text, align }))).toEqual([
+      { text: '#Credit\n◄ site.com  |  145', align: 9 },
+      { text: 'top', align: 8 },
+      { text: 'plain', align: undefined },
+    ]);
+  });
+
   it('recovers from the malformed fixture with one warning per skipped block', () => {
     const { cues, warnings } = parseSrt(malformedSrt);
     expect(cues.map((cue) => cue.startTime)).toEqual([2, 25, 30]);

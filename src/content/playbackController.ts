@@ -1,8 +1,9 @@
 import { DEMO_SUBTITLE_TEXT } from '../shared/constants';
 import type { PlayerState, SubLankaMessage } from '../shared/messages';
 import { DEFAULT_SETTINGS, type SubtitleSettings } from '../shared/settings';
-import { activeText, createCueIndex, type CueIndex } from '../subtitles/subtitleSearch';
-import { hideSubtitle, setOverlayAppearance, showSubtitle } from './subtitleOverlay';
+import { activeLayout, createCueIndex, type CueIndex } from '../subtitles/subtitleSearch';
+import type { SubtitleLayout } from '../subtitles/types';
+import { hideSubtitle, setOverlayAppearance, setOverlayVideo, showSubtitle } from './subtitleOverlay';
 import { findVideoCandidates, pickBestVideo, videoId } from './videoCandidates';
 
 const MEDIA_EVENTS = [
@@ -17,6 +18,9 @@ const MEDIA_EVENTS = [
   'emptied',
   'loadedmetadata',
 ] as const;
+
+/** With hideCredits, cues on screen longer than this (seconds) are skipped; no line of dialogue lasts a minute. */
+const MAX_DIALOGUE_SECONDS = 60;
 
 /** How often to notice a removed or replaced video element while a track is loaded. */
 const VIDEO_CHECK_MS = 1000;
@@ -36,8 +40,8 @@ export class PlaybackController {
   private lastPlayed: HTMLVideoElement | null = null;
   private frame: number | null = null;
   private videoCheck: ReturnType<typeof setInterval> | null = null;
-  /** What the overlay shows now: null = no overlay, "" = overlay in a gap between cues. */
-  private renderedText: string | null = null;
+  /** JSON of what the overlay shows now: null = no overlay. */
+  private rendered: string | null = null;
 
   constructor() {
     // 'play' does not bubble, so listen in the capture phase to see every video the user starts.
@@ -119,6 +123,7 @@ export class PlaybackController {
     for (const type of MEDIA_EVENTS) this.video?.removeEventListener(type, this.update);
     this.stopFrames();
     this.video = video;
+    setOverlayVideo(video);
     for (const type of MEDIA_EVENTS) video?.addEventListener(type, this.update);
   }
 
@@ -144,20 +149,22 @@ export class PlaybackController {
     this.videoCheck = null;
   }
 
-  private currentText(): string | null {
-    if (this.demoVisible) return DEMO_SUBTITLE_TEXT;
+  private currentLayout(): SubtitleLayout | null {
+    if (this.demoVisible) return { main: DEMO_SUBTITLE_TEXT, placed: {} };
     if (!this.track || !this.subtitlesEnabled) return null;
-    if (!this.video || this.video.ended) return '';
-    return activeText(this.track.cues, this.video.currentTime - this.settings.offset);
+    if (!this.video || this.video.ended) return { main: '', placed: {} };
+    const maxDuration = this.settings.hideCredits ? MAX_DIALOGUE_SECONDS : Infinity;
+    return activeLayout(this.track.cues, this.video.currentTime - this.settings.offset, maxDuration);
   }
 
   /** Renders the text for the video's current time; runs on media events and every frame during playback. */
   private update = (): void => {
-    const text = this.currentText();
-    if (text !== this.renderedText) {
-      this.renderedText = text;
-      if (text === null) hideSubtitle();
-      else showSubtitle(text);
+    const layout = this.currentLayout();
+    const key = layout && JSON.stringify(layout);
+    if (key !== this.rendered) {
+      this.rendered = key;
+      if (layout === null) hideSubtitle();
+      else showSubtitle(layout.main, layout.placed);
     }
 
     // timeupdate fires only about 4 times a second, so follow the video frame by frame while it plays.

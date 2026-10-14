@@ -7,6 +7,7 @@ import { AppearanceSettings } from './components/AppearanceSettings';
 import { DeveloperTools } from './components/DeveloperTools';
 import { Header } from './components/Header';
 import { PlayerStatusCard } from './components/PlayerStatusCard';
+import { PositionCard } from './components/PositionCard';
 import { SubtitleTrackCard } from './components/SubtitleTrackCard';
 import { TimingCard } from './components/TimingCard';
 import { UpcomingFeatures } from './components/UpcomingFeatures';
@@ -125,6 +126,7 @@ export function App() {
         onAdjust={(delta) => updateSettings((current) => ({ offset: normalizeOffset(current.offset + delta) }))}
         onReset={() => updateSettings(() => ({ offset: 0 }))}
       />
+      <PositionCard settings={settings} onChange={(patch) => updateSettings(() => patch)} />
       <AppearanceSettings settings={settings} onChange={(patch) => updateSettings(() => patch)} />
       <DeveloperTools
         demoVisible={state?.demoVisible ?? false}

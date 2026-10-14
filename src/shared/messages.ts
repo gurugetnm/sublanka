@@ -45,7 +45,8 @@ export function isSubtitleCue(value: unknown): value is SubtitleCue {
     value.startTime >= 0 &&
     value.endTime > value.startTime &&
     typeof value.text === 'string' &&
-    value.text !== ''
+    value.text !== '' &&
+    (value.align === undefined || (Number.isInteger(value.align) && Number(value.align) >= 1 && Number(value.align) <= 9))
   );
 }
 
