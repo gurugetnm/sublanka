@@ -1,0 +1,9 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  @apply m-0 w-[368px] bg-stone-50 font-sans text-stone-900 antialiased dark:bg-stone-950 dark:text-stone-100;
+}
