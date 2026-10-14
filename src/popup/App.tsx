@@ -14,14 +14,18 @@ import { SearchPanel } from './components/SearchPanel';
 import { SubtitleTrackCard } from './components/SubtitleTrackCard';
 import { Tabs, type TabItem } from './components/Tabs';
 import { TimingCard } from './components/TimingCard';
+import { TranslatePanel } from './components/TranslatePanel';
+import { TranslationSettings } from './components/TranslationSettings';
+import { loadTranslationKeyStatus } from '../translation/googleTranslate';
 import { connectToActiveTab, sendToTab, type TabConnection } from './tabBridge';
 
 const PAGE_ERROR = 'Could not reach the page. Reload it and try again.';
 
-type Section = 'subtitles' | 'search' | 'settings';
+type Section = 'subtitles' | 'search' | 'translate' | 'settings';
 const SECTIONS: TabItem<Section>[] = [
   { id: 'subtitles', label: 'Subtitles' },
   { id: 'search', label: 'Search' },
+  { id: 'translate', label: 'Translate' },
   { id: 'settings', label: 'Settings' },
 ];
 const SECTION_KEY = 'sublanka.section';
@@ -45,6 +49,7 @@ export function App() {
   const [warnings, setWarnings] = useState<string[]>([]);
   const [section, setSection] = useState<Section>(initialSection);
   const [account, setAccount] = useState<AccountStatus | null>(null);
+  const [translationReady, setTranslationReady] = useState<boolean | null>(null);
 
   function openSection(next: Section) {
     setSection(next);
@@ -57,6 +62,7 @@ export function App() {
 
   useEffect(() => {
     loadAccountStatus().then(setAccount, () => setAccount({ hasApiKey: false, username: null }));
+    loadTranslationKeyStatus().then(setTranslationReady, () => setTranslationReady(false));
     connectToActiveTab().then(setConnection, () => setConnection({ kind: 'unavailable' }));
     loadSettings()
       .catch(() => {
@@ -180,10 +186,21 @@ export function App() {
         />
       </div>
 
+      <div {...panel('translate')}>
+        <TranslatePanel
+          tabId={tabId}
+          currentTrack={state?.track ?? null}
+          configured={translationReady}
+          onOpenSettings={() => openSection('settings')}
+          onTrackLoaded={onTrackLoaded}
+        />
+      </div>
+
       <div {...panel('settings')} className="flex flex-col gap-3">
         <PositionCard settings={settings} onChange={(patch) => updateSettings(() => patch)} />
         <AppearanceSettings settings={settings} onChange={(patch) => updateSettings(() => patch)} />
         <ProviderSettings account={account} onChange={setAccount} />
+        <TranslationSettings configured={translationReady} onChange={setTranslationReady} />
         <DeveloperTools
           demoVisible={state?.demoVisible ?? false}
           disabled={!ready || busy}
