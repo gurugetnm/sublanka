@@ -11,7 +11,7 @@ import { detectPageMedia, requestDownload } from '../tabBridge';
 import { SegmentedControl } from './AppearanceSettings';
 import { ResultCard } from './ResultCard';
 import { TitleField } from './TitleField';
-import { Card, PRIMARY_BUTTON, SECONDARY_BUTTON } from './ui';
+import { Card, ErrorBox, HELP, INPUT, LABEL, PRIMARY_BUTTON, SECONDARY_BUTTON } from './ui';
 
 const provider = PROVIDERS.opensubtitles;
 /** A download still "loading" after this long was cut off (e.g. the browser suspended the worker). */
@@ -30,10 +30,6 @@ const CONFIDENCE_LABELS: Record<DetectedMedia['confidence'], string> = {
   medium: 'Possible match from the',
   low: 'Unsure guess from the',
 };
-
-const INPUT =
-  'w-full rounded-md border border-stone-300 bg-white px-2 py-1.5 text-sm placeholder:text-stone-400 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rose-700 dark:border-stone-700 dark:bg-stone-950';
-const LABEL = 'mb-1 block text-xs font-medium text-stone-600 dark:text-stone-300';
 
 type SearchStatus =
   | { phase: 'idle' }
@@ -77,6 +73,7 @@ export function SearchPanel({
   currentTrack,
   account,
   onOpenSettings,
+  onOpenSubtitles,
   onTrackLoaded,
 }: {
   tabId: number | null;
@@ -84,6 +81,8 @@ export function SearchPanel({
   /** null while loading. */
   account: AccountStatus | null;
   onOpenSettings: () => void;
+  /** Optional: offered after a load, so the user can go straight to the sync offset. */
+  onOpenSubtitles?: () => void;
   onTrackLoaded: (state: PlayerState, warnings: string[]) => void;
 }) {
   const [form, setForm] = useState<SearchForm>(EMPTY_FORM);
@@ -294,7 +293,7 @@ export function SearchPanel({
             onSelect={(selected) => updateForm({ title: selected.title, year: selected.year?.toString() ?? '', selected })}
             onClear={() => updateForm({ title: '', year: '', selected: null })}
           />
-          <div className={`grid gap-2 ${form.kind === 'episode' ? 'grid-cols-3' : 'grid-cols-2'}`}>
+          <div className="grid grid-cols-3 gap-2">
             <NumberField id="search-year" label="Year" optional value={form.year} onChange={(year) => updateForm({ year })} />
             {form.kind === 'episode' && (
               <>
@@ -302,14 +301,7 @@ export function SearchPanel({
                 <NumberField id="search-episode" label="Episode" value={form.episode} onChange={(episode) => updateForm({ episode })} />
               </>
             )}
-            {form.kind === 'movie' && (
-              <div>
-                <span className={LABEL}>Language</span>
-                <p className="py-1.5 text-sm">Sinhala</p>
-              </div>
-            )}
           </div>
-          {form.kind === 'episode' && <p className="text-xs text-stone-500 dark:text-stone-400">Language: Sinhala</p>}
 
           {formError && (
             <p role="alert" className="text-xs text-red-700 dark:text-red-300">
@@ -331,7 +323,7 @@ export function SearchPanel({
         </form>
       </Card>
 
-      {shownDownload && <DownloadNotice status={shownDownload} />}
+      {shownDownload && <DownloadNotice status={shownDownload} onOpenSubtitles={onOpenSubtitles} />}
 
       <section aria-label="Search results" aria-live="polite" aria-busy={searching} className="flex flex-col gap-2">
         {searching && (
@@ -342,20 +334,30 @@ export function SearchPanel({
         )}
 
         {status.phase === 'error' && (
-          <div role="alert" className="rounded-xl bg-red-50 p-3 text-xs text-red-800 dark:bg-red-950 dark:text-red-200">
-            <p>{status.message}</p>
-            {status.needsSetup && (
-              <button type="button" className={`${SECONDARY_BUTTON} mt-2`} onClick={onOpenSettings}>
-                Open settings
-              </button>
-            )}
-          </div>
+          <ErrorBox
+            actions={
+              status.needsSetup ? (
+                <button type="button" className={SECONDARY_BUTTON} onClick={onOpenSettings}>
+                  Open settings
+                </button>
+              ) : (
+                <button type="button" className={SECONDARY_BUTTON} onClick={submit}>
+                  Try again
+                </button>
+              )
+            }
+          >
+            {status.message}
+          </ErrorBox>
         )}
 
         {status.phase === 'done' && ranked.length === 0 && (
-          <p className="rounded-xl border border-dashed border-stone-300 px-3 py-5 text-center text-sm text-stone-600 dark:border-stone-700 dark:text-stone-300">
-            No Sinhala subtitles found. Try another title or release.
-          </p>
+          <div className="rounded-xl border border-dashed border-stone-400 px-3 py-5 text-center dark:border-stone-600">
+            <p className="text-sm font-medium">No Sinhala subtitles found</p>
+            <p className="mt-1 text-xs text-stone-600 dark:text-stone-300">
+              Check the spelling, remove the year, or try the original title. You can also translate an English file in the Translate tab.
+            </p>
+          </div>
         )}
 
         {status.phase === 'done' && ranked.length > 0 && (
@@ -397,7 +399,7 @@ export function SearchPanel({
         )}
       </section>
 
-      <p className="px-1 text-[11px] leading-relaxed text-stone-500 dark:text-stone-400">
+      <p className={`px-1 ${HELP}`}>
         Only the title, year, season and episode above (or the chosen title’s IMDb id) are sent to{' '}
         <a href="https://www.opensubtitles.com/" target="_blank" rel="noreferrer" className="underline">
           OpenSubtitles.com
@@ -433,7 +435,7 @@ function NumberField({
     <div>
       <label htmlFor={id} className={LABEL}>
         {label}
-        {optional && <span className="font-normal text-stone-400"> (optional)</span>}
+        {optional && <span className="font-normal text-stone-500 dark:text-stone-400"> (optional)</span>}
       </label>
       <input
         id={id}
@@ -485,11 +487,11 @@ function DetectedHint({
   return (
     <div className="flex items-center gap-2 rounded-lg bg-stone-100 px-2.5 py-2 text-xs dark:bg-stone-800">
       <p className="min-w-0 flex-1">
-        <span className="text-stone-500 dark:text-stone-400">
+        <span className="text-stone-600 dark:text-stone-300">
           {CONFIDENCE_LABELS[detected.confidence]} {SOURCE_LABELS[detected.source]}:{' '}
         </span>
         <span className="font-medium break-words">{describeMedia(detected)}</span>
-        {detected.confidence === 'low' && <span className="text-stone-500 dark:text-stone-400"> Check it before searching.</span>}
+        {detected.confidence === 'low' && <span className="text-stone-600 dark:text-stone-300"> Check it before searching.</span>}
       </p>
       {!sameForm(form, formFromMedia(detected)) && (
         <button type="button" className={`${SECONDARY_BUTTON} shrink-0`} onClick={() => onUse(detected)}>
@@ -500,15 +502,22 @@ function DetectedHint({
   );
 }
 
-function DownloadNotice({ status: { phase, message } }: { status: DownloadStatus }) {
+function DownloadNotice({ status: { phase, message }, onOpenSubtitles }: { status: DownloadStatus; onOpenSubtitles?: () => void }) {
   const style =
     phase === 'loading' ? 'bg-stone-100 text-stone-700 dark:bg-stone-800 dark:text-stone-200'
     : phase === 'loaded' ? 'bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200'
     : 'bg-red-50 text-red-800 dark:bg-red-950 dark:text-red-200';
   return (
-    <p role={phase === 'failed' ? 'alert' : 'status'} className={`flex items-start gap-2 rounded-xl px-3 py-2 text-xs leading-relaxed break-words ${style}`}>
+    <div className={`flex items-start gap-2 rounded-xl px-3 py-2 text-xs leading-relaxed break-words ${style}`}>
       {phase === 'loading' && <LoaderCircle className="mt-0.5 size-3.5 shrink-0 animate-spin" aria-hidden="true" />}
-      <span className="min-w-0">{message}</span>
-    </p>
+      <p role={phase === 'failed' ? 'alert' : 'status'} className="min-w-0 flex-1">
+        {message}
+      </p>
+      {phase === 'loaded' && onOpenSubtitles && (
+        <button type="button" className={`${SECONDARY_BUTTON} shrink-0`} onClick={onOpenSubtitles}>
+          Adjust sync
+        </button>
+      )}
+    </div>
   );
 }
