@@ -1,5 +1,6 @@
-import { isSubLankaMessage, type OverlayState } from '../shared/messages';
-import { hideSubtitle, isSubtitleVisible, showSubtitle } from './subtitleOverlay';
+import { isSubLankaMessage, type PlayerState } from '../shared/messages';
+import { loadSettings, parseSettings, SETTINGS_STORAGE_KEY } from '../shared/settings';
+import { PlaybackController } from './playbackController';
 
 declare global {
   interface Window {
@@ -7,14 +8,24 @@ declare global {
   }
 }
 
-// The popup injects this file before every message; register the listener only once per page.
+// The popup injects this file before every message; set up only once per page.
 if (!window.__sublankaContentScript) {
   window.__sublankaContentScript = true;
+  const controller = new PlaybackController();
 
-  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (state: OverlayState) => void) => {
+  loadSettings().then(
+    (settings) => controller.applySettings(settings),
+    () => {
+      // Storage unavailable: keep the defaults the controller starts with.
+    },
+  );
+  chrome.storage.onChanged.addListener((changes, area) => {
+    const change = changes[SETTINGS_STORAGE_KEY];
+    if (area === 'local' && change) controller.applySettings(parseSettings(change.newValue));
+  });
+
+  chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse: (state: PlayerState) => void) => {
     if (!isSubLankaMessage(message)) return;
-    if (message.type === 'sublanka:show-subtitle') showSubtitle(message.text);
-    else hideSubtitle();
-    sendResponse({ visible: isSubtitleVisible() });
+    sendResponse(controller.handle(message));
   });
 }
